@@ -31,6 +31,17 @@ MAX_IMAGE_PIXELS = 45_000_000
 OUTPUT_DIR = Path(tempfile.gettempdir()) / "ai_layer_splitter_outputs"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+if sys.stdout is not None:
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if sys.stderr is not None:
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 logger = logging.getLogger("ai_layer_splitter")
 logger.setLevel(logging.INFO)
 logger.handlers.clear()
@@ -286,6 +297,18 @@ def process_image():
 
 
 if __name__ == "__main__":
+    from flask import cli
+    cli.show_server_banner = lambda *_: None
+    logging.getLogger("werkzeug").setLevel(logging.ERROR)
+
+    print("=====================================================")
+    print(" [THÀNH CÔNG] AI Server đã khởi động thành công!")
+    print(f" Model đang dùng: {current_model_name}")
+    print(" Đang lắng nghe tại: http://127.0.0.1:5000")
+    print(" Trạng thái: SẴN SÀNG kết nối với Photoshop!")
+    print(" (Để server hoạt động, vui lòng giữ cửa sổ này)")
+    print("=====================================================\n")
     log_debug("Listening on http://127.0.0.1:5000")
     # Loopback-only: do not expose this image-processing server to the LAN.
     app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)
+
