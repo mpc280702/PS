@@ -10,6 +10,7 @@ import base64
 import io
 import logging
 import os
+import re
 import sys
 import tempfile
 import threading
@@ -94,11 +95,21 @@ def decode_image_request() -> Image.Image:
         encoded = data.get("image_base64")
         if not isinstance(encoded, str) or not encoded.strip():
             raise ValueError("Không tìm thấy image_base64 trong dữ liệu gửi lên.")
-        if "," in encoded and encoded.lstrip().lower().startswith("data:image/"):
+        if "," in encoded:
             encoded = encoded.split(",", 1)[1]
+        
+        # Xóa sạch khoảng trắng, ký tự xuống dòng (\r, \n) do MIME/UXP tạo ra
+        encoded = re.sub(r"[\r\n\s]", "", encoded)
+        
+        # Bổ sung ký tự '=' padding nếu bị thiếu
+        missing_padding = len(encoded) % 4
+        if missing_padding:
+            encoded += "=" * (4 - missing_padding)
+
         try:
-            raw_bytes = base64.b64decode(encoded, validate=True)
+            raw_bytes = base64.b64decode(encoded)
         except Exception as exc:
+            log_debug(f"Base64 decode error: {exc}")
             raise ValueError("Dữ liệu Base64 của ảnh không hợp lệ.") from exc
     elif "file" in request.files:
         file_storage = request.files["file"]

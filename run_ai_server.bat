@@ -6,6 +6,9 @@ set "PYTHONIOENCODING=utf-8"
 title AI Photoshop Backend Server
 cd /d "%~dp0"
 
+echo Dang kiem tra va tat server cu neu co...
+taskkill /F /IM pythonw.exe >nul 2>&1
+
 set "PY_EXE="
 if exist "%LOCALAPPDATA%\Programs\Python\Python311\python.exe" (
     set "PY_EXE=%LOCALAPPDATA%\Programs\Python\Python311\python.exe"

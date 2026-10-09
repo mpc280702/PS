@@ -82,22 +82,29 @@ async function fileToBase64(file) {
         }
         base64Data = btoa(binary);
     }
-    return String(base64Data).replace(/^data:image\/[^;]+;base64,/i, '').trim();
+    return String(base64Data || '')
+        .replace(/^data:image\/[^;]+;base64,/i, '')
+        .replace(/[\r\n\s]/g, '');
 }
 
 async function base64ToFile(base64Data, file) {
     if (typeof base64Data !== 'string' || !base64Data.length) {
         throw new Error(`Dữ liệu ảnh trả về cho ${file.name} đang trống.`);
     }
-    let binary;
+    const cleanData = base64Data.replace(/^data:image\/[^;]+;base64,/i, '').replace(/[\r\n\s]/g, '');
     try {
-        binary = atob(base64Data);
-    } catch (_) {
-        throw new Error(`Dữ liệu Base64 của ${file.name} không hợp lệ.`);
+        await file.write(cleanData, { format: formats.base64 });
+    } catch (err) {
+        let binary;
+        try {
+            binary = atob(cleanData);
+        } catch (_) {
+            throw new Error(`Dữ liệu Base64 của ${file.name} không hợp lệ.`);
+        }
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        await file.write(bytes.buffer, { format: formats.binary });
     }
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    await file.write(bytes.buffer, { format: formats.binary });
 }
 
 async function exportCompositeToPng(sourceDoc, exportFile) {
