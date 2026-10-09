@@ -4,3 +4,4 @@ rembg
 numpy
 opencv-python
 psd-tools
+waitress
