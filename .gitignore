@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+server_debug.log
+.venv/
+venv/
+env/
+
+# Temp image files
+*.tmp
+temp_*.png
+temp_*.jpg
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

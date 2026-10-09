@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h3>⚡ AI LAYER SPLITTER</h3>
+            <p class="subtitle">Tự động tách ảnh phẳng thành Layer</p>
+        </div>
+
+        <div class="options">
+            <label><input type="checkbox" id="chkPerson" checked> Tách Người & Vật thể</label>
+            <label><input type="checkbox" id="chkInpaint" checked> Bù nền hoàn chỉnh (Inpaint)</label>
+        </div>
+
+        <button id="btnProcess" class="btn-primary">TÁCH LAYER NGAY</button>
+
+        <div class="status-box">
+            <div id="statusText">Trạng thái: Sẵn sàng</div>
+            <div class="progress-bar-bg">
+                <div id="progressBar" class="progress-bar-fill"></div>
+            </div>
+        </div>
+    </div>
+    <script src="index.js"></script>
+</body>
+</html>
