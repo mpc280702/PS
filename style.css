@@ -30,13 +30,13 @@ body {
     background: linear-gradient(145deg, #398ffb, #1455ba); font-weight: 800; letter-spacing: -.5px;
 }
 .heading-copy { min-width: 0; }
-h1 { margin: 0; font-size: 13px; font-weight: 800; letter-spacing: .65px; }
+h1 { margin: 0; font-size: 13px; font-weight: 800; letter-spacing: .65px; color: var(--text); }
 .subtitle { margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .options { background: var(--surface-raised); border: 1px solid var(--border); border-radius: 9px; padding: 2px 11px; }
-.option-row { display: flex; align-items: flex-start; gap: 9px; padding: 12px 1px; cursor: pointer; }
+.option-row { display: flex; align-items: flex-start; gap: 9px; padding: 12px 1px; cursor: pointer; color: var(--text); }
 .option-row input { width: 14px; height: 14px; margin: 2px 0 0; accent-color: var(--accent); flex: 0 0 auto; }
-.option-copy { display: flex; flex-direction: column; gap: 4px; line-height: 1.35; }
-.option-copy strong { font-size: 12px; font-weight: 650; }
+.option-copy { display: flex; flex-direction: column; gap: 4px; line-height: 1.35; color: var(--text); }
+.option-copy strong { font-size: 12px; font-weight: 650; color: #ffffff; }
 .option-copy small { color: var(--muted); font-size: 10.5px; }
 .option-divider { height: 1px; background: var(--border); }
 .actions { display: flex; flex-direction: column; gap: 8px; }
@@ -48,7 +48,7 @@ button:disabled { opacity: .55; cursor: wait; }
 .btn-secondary:hover:not(:disabled) { background: #41444c; }
 .status-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--surface-soft); }
 .status-heading { display: flex; align-items: center; gap: 7px; min-height: 16px; }
-.status-heading strong { font-size: 11px; font-weight: 650; line-height: 1.4; }
+.status-heading strong { font-size: 11px; font-weight: 650; line-height: 1.4; color: #ffffff; }
 .status-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #888d96; }
 .status-dot.success { background: var(--success); }
 .status-dot.warning { background: var(--warning); }
