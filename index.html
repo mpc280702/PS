@@ -1,30 +1,57 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="style.css">
+    <title>AI Auto Layer Splitter</title>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h3>⚡ AI LAYER SPLITTER</h3>
-            <p class="subtitle">Tự động tách ảnh phẳng thành Layer</p>
-        </div>
-
-        <div class="options">
-            <label><input type="checkbox" id="chkPerson" checked> Tách Người & Vật thể</label>
-            <label><input type="checkbox" id="chkInpaint" checked> Bù nền hoàn chỉnh (Inpaint)</label>
-        </div>
-
-        <button id="btnProcess" class="btn-primary">TÁCH LAYER NGAY</button>
-
-        <div class="status-box">
-            <div id="statusText">Trạng thái: Sẵn sàng</div>
-            <div class="progress-bar-bg">
-                <div id="progressBar" class="progress-bar-fill"></div>
+    <main class="container">
+        <header class="header">
+            <div class="brand-mark">AI</div>
+            <div class="heading-copy">
+                <h1>AI LAYER SPLITTER</h1>
+                <p class="subtitle">Tách chủ thể và tạo nền riêng trong Photoshop</p>
             </div>
+        </header>
+
+        <section class="options" aria-label="Tuỳ chọn xử lý">
+            <label class="option-row" for="chkPerson">
+                <input type="checkbox" id="chkPerson" checked>
+                <span class="option-copy">
+                    <strong>Tách người &amp; vật thể</strong>
+                    <small>Tạo layer chủ thể có nền trong suốt</small>
+                </span>
+            </label>
+            <div class="option-divider"></div>
+            <label class="option-row" for="chkInpaint">
+                <input type="checkbox" id="chkInpaint" checked>
+                <span class="option-copy">
+                    <strong>Bù nền sau khi tách</strong>
+                    <small>Tạo layer nền đã xoá chủ thể bằng OpenCV</small>
+                </span>
+            </label>
+        </section>
+
+        <div class="actions">
+            <button id="btnProcess" class="btn-primary">TÁCH LAYER NGAY</button>
+            <button id="btnCheck" class="btn-secondary">Kiểm tra AI Server</button>
         </div>
-    </div>
+
+        <section class="status-card" aria-live="polite">
+            <div class="status-heading">
+                <span class="status-dot" id="statusDot"></span>
+                <strong id="statusText">Sẵn sàng</strong>
+            </div>
+            <div class="progress-track" role="progressbar" aria-label="Tiến trình xử lý" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div id="progressBar" class="progress-fill"></div>
+            </div>
+            <p id="detailText" class="detail-text">Mở ảnh trong Photoshop, chọn các tuỳ chọn rồi bắt đầu.</p>
+        </section>
+
+        <p class="footnote">Ảnh gốc được giữ lại. Khi tạo nền mới, layer gốc sẽ được ẩn chứ không bị xoá.</p>
+    </main>
     <script src="index.js"></script>
 </body>
 </html>
