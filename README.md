@@ -184,3 +184,15 @@ The banner import panel now has a separate **Tạo lớp phủ bảo toàn banne
 The separate **Ẩn layer gốc sau khi nhập** option is still off by default. Enabling it also forces the preservation overlay on, so source visibility is not removed without a fallback layer.
 
 The overlay retains original pixels and does not reconstruct the background behind moved elements. Review the final layer stack before deleting or permanently hiding source layers.
+
+
+---
+
+## v2.9 — Editable layer mask for background removal
+
+The classic **Tách chủ thể** workflow now includes a checked-by-default option: **Tạo Layer Mask cho chủ thể**. When enabled, the plugin imports the AI result and runs Photoshop's native **Layer Mask > From Transparency** action on the new subject layer. This converts the cutout's transparency into an editable user mask so designers can refine edges using the Brush tool and paint white/black on the mask instead of destructively erasing pixels.
+
+- To adjust the cutout, select the white/black mask thumbnail next to the subject layer, then paint white to reveal and black to conceal.
+- Uncheck **Tạo Layer Mask cho chủ thể** if you prefer the original transparent PNG layer without a separate mask.
+- This option applies to the one-click background-removal/subject-extraction workflow. The automatic banner decomposition still uses its existing alpha masks and preservation overlay.
+- The mask conversion uses Photoshop UXP batchPlay. Static checks verify the action wiring; actual behavior must be confirmed in the installed Photoshop version.
