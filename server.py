@@ -852,20 +852,47 @@ def segment_auto_export():
     with AUTO_STATE_LOCK:
         if not image_id or image_id != AUTO_STATE["image_id"] or AUTO_STATE["image"] is None:
             return jsonify({"status": "error", "error": "Phiên phân tích đã hết hạn. Hãy phân tích banner lại."}), 409
-        item = AUTO_STATE["objects"].get(object_id)
-        if item is None:
-            return jsonify({"status": "error", "error": "Không tìm thấy vùng được chọn. Hãy phân tích banner lại."}), 404
-
         original = AUTO_STATE["image"].convert("RGBA")
-        work_mask = np.asarray(item["mask"], dtype=np.uint8)
-        # Upsample the mask to original resolution, then crop before converting
-        # the source to a full RGBA array. This avoids building another full-size
-        # 4-channel canvas per selected region on top of Photoshop's scratch data.
-        full_mask = cv2.resize(
-            work_mask,
-            (original.width, original.height),
-            interpolation=cv2.INTER_NEAREST,
-        ).astype(bool)
+
+        # Special export mode: make a complementary "remaining artwork" layer
+        # from all pixels not covered by the exact masks the user chose to import.
+        # This is not an inpainted background; it preserves every source pixel so
+        # the visible layer stack can reconstruct the original banner without
+        # checkerboard holes when the source layers are hidden.
+        if object_id == "__remainder__":
+            selected_ids = data.get("object_ids")
+            if not isinstance(selected_ids, list) or not selected_ids:
+                return jsonify({"status": "error", "error": "Thiếu danh sách vùng đã chọn để tạo layer phần còn lại."}), 400
+            if len(selected_ids) > 160:
+                return jsonify({"status": "error", "error": "Có quá nhiều vùng được chọn. Hãy tách thành vài nhóm."}), 400
+            work_image = AUTO_STATE["work_image"]
+            if work_image is None:
+                return jsonify({"status": "error", "error": "Phiên phân tích đã hết hạn. Hãy phân tích banner lại."}), 409
+            union_mask = np.zeros((work_image.height, work_image.width), dtype=bool)
+            for selected_id in selected_ids:
+                selected_item = AUTO_STATE["objects"].get(selected_id)
+                if selected_item is None:
+                    return jsonify({"status": "error", "error": f"Không tìm thấy vùng {selected_id}."}), 404
+                union_mask |= np.asarray(selected_item["mask"], dtype=bool)
+            full_union = cv2.resize(
+                union_mask.astype(np.uint8),
+                (original.width, original.height),
+                interpolation=cv2.INTER_NEAREST,
+            ).astype(bool)
+            full_mask = ~full_union
+            export_name = "AI - Phần còn lại (giữ nguyên pixel banner)"
+        else:
+            item = AUTO_STATE["objects"].get(object_id)
+            if item is None:
+                return jsonify({"status": "error", "error": "Không tìm thấy vùng được chọn. Hãy phân tích banner lại."}), 404
+            work_mask = np.asarray(item["mask"], dtype=np.uint8)
+            full_mask = cv2.resize(
+                work_mask,
+                (original.width, original.height),
+                interpolation=cv2.INTER_NEAREST,
+            ).astype(bool)
+            export_name = str(item.get("name") or object_id)
+
         ys, xs = np.where(full_mask)
         if xs.size == 0 or ys.size == 0:
             return jsonify({"status": "error", "error": "Mặt nạ vùng chọn rỗng. Hãy phân tích banner lại."}), 422
@@ -885,6 +912,7 @@ def segment_auto_export():
         return jsonify({
             "status": "success",
             "object_id": object_id,
+            "name": export_name,
             "width": layer.width,
             "height": layer.height,
             "crop_x": crop_x,
