@@ -123,3 +123,30 @@ button:disabled { opacity: .55; cursor: wait; }
 .notice-icon { display: flex; align-items: center; justify-content: center; flex: 0 0 18px; width: 18px; height: 18px; border-radius: 50%; color: #241b09; background: var(--warning); font-size: 10px; font-weight: 900; }
 .preview-notice strong { display: block; margin-bottom: 2px; color: #ffdda0; font-size: 10.5px; }
 .preview-notice p { margin: 0; color: #c4b89f; font-size: 9.5px; line-height: 1.45; }
+
+
+/* Interactive object segmentation */
+.segmentation-panel { border-color: #36517a; }
+.seg-body { padding: 0 13px 14px; }
+.seg-body > .btn-secondary { width: 100%; margin-bottom: 8px; }
+.seg-instructions { margin: 0 0 10px; color: var(--muted); font-size: 10px; line-height: 1.55; }
+.seg-instructions strong { color: #e8f0ff; }
+.seg-field-label { padding: 0 0 5px; }
+.seg-select { width: 100%; margin: 0 0 10px; }
+.seg-preview-wrap { position: relative; width: fit-content; max-width: 100%; max-height: 380px; overflow: auto; display: block; margin: 0 auto; border: 1px solid #34465f; border-radius: 9px; background-color: #0d1118; background-image: linear-gradient(45deg,#1b2431 25%,transparent 25%),linear-gradient(-45deg,#1b2431 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#1b2431 75%),linear-gradient(-45deg,transparent 75%,#1b2431 75%); background-size: 16px 16px; background-position: 0 0,0 8px,8px -8px,-8px 0; }
+.seg-preview-wrap[hidden] { display: none !important; }
+#segPreviewImage { display: block; max-width: 100%; max-height: 378px; width: auto; height: auto; object-fit: contain; }
+#segOverlayCanvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; pointer-events: none; }
+.seg-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 25px; padding: 4px 1px 7px; color: var(--muted); font-size: 9px; }
+#segScore { color: #9fc3ff; font-weight: 700; text-align: right; }
+.seg-name-input { display: block; width: 100%; min-width: 0; margin: 0 0 10px; padding: 9px 10px; border: 1px solid #34435a; border-radius: 8px; color: var(--text); background: #111722; font-size: 11px; }
+.seg-name-input::placeholder { color: #77869a; }
+.seg-actions { display: grid; grid-template-columns: .8fr 1.2fr; gap: 8px; }
+.seg-actions button { min-height: 36px; padding: 8px 9px; font-size: 10px; }
+.seg-hint { margin: 9px 1px 0; color: var(--muted-2); font-size: 9.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.seg-hint.error { color: var(--error); }
+.seg-hint.success { color: var(--success); }
+@media (max-width: 360px) {
+  .seg-body { padding-right: 11px; padding-left: 11px; }
+  .seg-actions { grid-template-columns: 1fr; }
+}
