@@ -514,6 +514,293 @@ def segment_close():
     return jsonify({"status": "success"})
 
 
+
+# Automatic banner decomposition: discover multiple masks, then let the user
+# choose which ones should become independent Photoshop layers.
+AUTO_STATE: dict[str, Any] = {
+    "image_id": None,
+    "image": None,
+    "work_image": None,
+    "scale_x": 1.0,
+    "scale_y": 1.0,
+    "objects": {},
+}
+AUTO_STATE_LOCK = threading.RLock()
+
+
+def _auto_object_name(index: int, bbox: tuple[int, int, int, int], image_size: tuple[int, int]) -> str:
+    x, y, width, height = bbox
+    canvas_w, canvas_h = image_size
+    cx = (x + width / 2) / max(1, canvas_w)
+    cy = (y + height / 2) / max(1, canvas_h)
+    col = "trái" if cx < 0.34 else ("phải" if cx > 0.66 else "giữa")
+    row = "trên" if cy < 0.30 else ("dưới" if cy > 0.70 else "trung tâm")
+    if width / max(1, canvas_w) > 0.75 and height / max(1, canvas_h) > 0.65:
+        row, col = "toàn", "khung"
+    return f"Phần {index:02d} · {row} {col}"
+
+
+def _auto_thumbnail(image: Image.Image, mask: np.ndarray, bbox: tuple[int, int, int, int]) -> str:
+    x, y, width, height = bbox
+    rgba = np.asarray(image.convert("RGBA").crop((x, y, x + width, y + height)), dtype=np.uint8).copy()
+    cropped_mask = mask[y:y + height, x:x + width]
+    if rgba.shape[:2] != cropped_mask.shape:
+        cropped_mask = cv2.resize(
+            cropped_mask.astype(np.uint8),
+            (rgba.shape[1], rgba.shape[0]),
+            interpolation=cv2.INTER_NEAREST,
+        ).astype(bool)
+    rgba[:, :, 3] = np.minimum(rgba[:, :, 3], cropped_mask.astype(np.uint8) * 255)
+    rgba[~cropped_mask, :3] = 0
+    thumbnail = Image.fromarray(rgba, mode="RGBA")
+    thumbnail.thumbnail((136, 108), Image.Resampling.LANCZOS)
+    return encode_png_base64(thumbnail)
+
+
+@app.route("/segment_auto", methods=["POST", "OPTIONS"])
+def segment_auto():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    started_at = time.time()
+    try:
+        import torch
+        from segment_anything import SamAutomaticMaskGenerator
+
+        original = decode_image_request()
+        width, height = original.size
+        profile = str((request.get_json(silent=True) or {}).get("quality", "balanced")).lower()
+        profiles = {
+            "coarse": {"points_per_side": 12, "pred_iou_thresh": 0.86, "stability_score_thresh": 0.90, "limit": 24},
+            "balanced": {"points_per_side": 20, "pred_iou_thresh": 0.84, "stability_score_thresh": 0.88, "limit": 40},
+            "detail": {"points_per_side": 28, "pred_iou_thresh": 0.82, "stability_score_thresh": 0.86, "limit": 60},
+        }
+        config = profiles.get(profile, profiles["balanced"])
+        predictor, device = get_sam_predictor()
+        model = predictor.model
+
+        max_side = 1600
+        scale = min(1.0, max_side / max(width, height))
+        work_w = max(1, int(round(width * scale)))
+        work_h = max(1, int(round(height * scale)))
+        if scale < 1:
+            work_image = original.resize((work_w, work_h), Image.Resampling.LANCZOS)
+        else:
+            work_image = original.copy()
+        rgb = np.asarray(work_image.convert("RGB"), dtype=np.uint8)
+
+        # Use a lock because the local models share memory with other endpoints.
+        with inference_lock:
+            generator = SamAutomaticMaskGenerator(
+                model=model,
+                points_per_side=config["points_per_side"],
+                pred_iou_thresh=config["pred_iou_thresh"],
+                stability_score_thresh=config["stability_score_thresh"],
+                box_nms_thresh=0.72,
+                crop_n_layers=0,
+                min_mask_region_area=max(16, int(work_w * work_h * 0.00035)),
+                output_mode="binary_mask",
+            )
+            generated = generator.generate(rgb)
+
+        total = work_w * work_h
+        if profile == "coarse":
+            min_area_ratio, max_area_ratio = 0.0035, 0.68
+        elif profile == "detail":
+            min_area_ratio, max_area_ratio = 0.00045, 0.72
+        else:
+            min_area_ratio, max_area_ratio = 0.0012, 0.70
+        min_area = max(30, int(total * min_area_ratio))
+        candidates = []
+        for item in generated:
+            mask = np.asarray(item.get("segmentation"), dtype=bool)
+            area = int(item.get("area", int(mask.sum())))
+            ratio = area / max(1, total)
+            quality = float(item.get("predicted_iou", 0.0))
+            stability = float(item.get("stability_score", 0.0))
+            if mask.shape != (work_h, work_w) or area < min_area or ratio > max_area_ratio:
+                continue
+            if quality < config["pred_iou_thresh"] - 0.06 or stability < config["stability_score_thresh"] - 0.06:
+                continue
+            bbox_values = item.get("bbox", [0, 0, 0, 0])
+            bx, by, bw, bh = [int(round(float(v))) for v in bbox_values]
+            if bw < 1 or bh < 1:
+                continue
+            candidates.append({
+                "mask": mask,
+                "area": area,
+                "quality": quality,
+                "stability": stability,
+                "bbox": (bx, by, bw, bh),
+            })
+
+        # Drop near-identical masks, while keeping nested masks that represent
+        # different-sized pieces of text, illustrations, or decorative clusters.
+        candidates.sort(
+            key=lambda item: (
+                0.62 * item["quality"] + 0.38 * item["stability"],
+                item["area"],
+            ),
+            reverse=True,
+        )
+        unique = []
+        for candidate in candidates:
+            bx, by, bw, bh = candidate["bbox"]
+            duplicate = False
+            for kept in unique:
+                kx, ky, kw, kh = kept["bbox"]
+                inter_x1, inter_y1 = max(bx, kx), max(by, ky)
+                inter_x2, inter_y2 = min(bx + bw, kx + kw), min(by + bh, ky + kh)
+                if inter_x2 <= inter_x1 or inter_y2 <= inter_y1:
+                    continue
+                # Cheap bbox test first; pixel IoU only for close candidates.
+                inter = np.logical_and(
+                    candidate["mask"][inter_y1:inter_y2, inter_x1:inter_x2],
+                    kept["mask"][inter_y1:inter_y2, inter_x1:inter_x2],
+                ).sum()
+                union = candidate["area"] + kept["area"] - int(inter)
+                if union and int(inter) / union > 0.93:
+                    duplicate = True
+                    break
+            if not duplicate:
+                unique.append(candidate)
+
+        # Keep a spread of large visual elements and smaller details instead of
+        # returning hundreds of tiny texture fragments.
+        unique.sort(key=lambda item: item["area"], reverse=True)
+        selected = unique[:config["limit"]]
+        if not selected:
+            return jsonify({
+                "status": "error",
+                "error": "SAM chưa tìm được vùng đủ rõ. Hãy thử mức Chi tiết hoặc dùng chế độ bấm chọn vật thể.",
+            }), 422
+
+        # Give small but confident masks a chance when there are many candidates.
+        if len(unique) > len(selected):
+            remaining = [item for item in unique[config["limit"]:] if item["quality"] >= 0.90 and item["stability"] >= 0.92]
+            for item in remaining[:max(0, config["limit"] // 5)]:
+                selected[-1] = item
+                selected.sort(key=lambda row: row["area"], reverse=True)
+
+        objects = {}
+        response_objects = []
+        for index, item in enumerate(selected, start=1):
+            bx, by, bw, bh = item["bbox"]
+            object_id = f"auto-{index:03d}"
+            area_percent = round(item["area"] * 100.0 / max(1, total), 3)
+            scaled_bbox = (
+                int(round(bx / scale)),
+                int(round(by / scale)),
+                max(1, int(round(bw / scale))),
+                max(1, int(round(bh / scale))),
+            )
+            name = _auto_object_name(index, scaled_bbox, (width, height))
+            preview = _auto_thumbnail(work_image, item["mask"], item["bbox"])
+            objects[object_id] = {
+                "mask": item["mask"],
+                "bbox": scaled_bbox,
+                "area": item["area"],
+                "quality": item["quality"],
+                "stability": item["stability"],
+            }
+            response_objects.append({
+                "id": object_id,
+                "name": name,
+                "bbox": {"x": scaled_bbox[0], "y": scaled_bbox[1], "width": scaled_bbox[2], "height": scaled_bbox[3]},
+                "area_percent": area_percent,
+                "score": round(item["quality"], 3),
+                "thumbnail_base64": preview,
+            })
+
+        image_id = uuid.uuid4().hex
+        with AUTO_STATE_LOCK:
+            AUTO_STATE.update({
+                "image_id": image_id,
+                "image": original.copy(),
+                "work_image": work_image.copy(),
+                "scale_x": width / max(1, work_w),
+                "scale_y": height / max(1, work_h),
+                "objects": objects,
+            })
+        log_debug(
+            f"Auto banner segmentation produced {len(response_objects)} candidates "
+            f"from {width}x{height} image, profile={profile}, device={device}, "
+            f"elapsed={round(time.time() - started_at, 2)}s"
+        )
+        return jsonify({
+            "status": "success",
+            "image_id": image_id,
+            "width": width,
+            "height": height,
+            "device": device,
+            "quality": profile,
+            "count": len(response_objects),
+            "elapsed_seconds": round(time.time() - started_at, 2),
+            "objects": response_objects,
+            "message": "Đã phân tích banner. Chọn các vùng cần tách thành layer riêng.",
+        })
+    except ValueError as exc:
+        return jsonify({"status": "error", "error": str(exc)}), 400
+    except Exception as exc:
+        log_debug(f"Automatic banner segmentation failed: {exc}")
+        return jsonify({"status": "error", "error": f"Không phân tích được banner tự động: {exc}"}), 500
+
+
+@app.route("/segment_auto_export", methods=["POST", "OPTIONS"])
+def segment_auto_export():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    data = request.get_json(silent=True) or {}
+    image_id = data.get("image_id")
+    object_id = data.get("object_id")
+    with AUTO_STATE_LOCK:
+        if not image_id or image_id != AUTO_STATE["image_id"] or AUTO_STATE["image"] is None:
+            return jsonify({"status": "error", "error": "Phiên phân tích đã hết hạn. Hãy phân tích banner lại."}), 409
+        item = AUTO_STATE["objects"].get(object_id)
+        if item is None:
+            return jsonify({"status": "error", "error": "Không tìm thấy vùng được chọn. Hãy phân tích banner lại."}), 404
+
+        original = AUTO_STATE["image"].convert("RGBA")
+        work_mask = np.asarray(item["mask"], dtype=np.uint8)
+        full_mask = cv2.resize(
+            work_mask,
+            (original.width, original.height),
+            interpolation=cv2.INTER_NEAREST,
+        ).astype(bool)
+        rgba = np.asarray(original, dtype=np.uint8).copy()
+        original_alpha = rgba[:, :, 3].copy()
+        rgba[:, :, 3] = np.minimum(original_alpha, full_mask.astype(np.uint8) * 255)
+        rgba[~full_mask, :3] = 0
+        layer = Image.fromarray(rgba, mode="RGBA")
+        if original.info.get("dpi"):
+            layer.info["dpi"] = original.info["dpi"]
+        return jsonify({
+            "status": "success",
+            "object_id": object_id,
+            "width": original.width,
+            "height": original.height,
+            "foreground_base64": encode_png_base64(layer),
+            "message": "Đã xuất layer trong suốt.",
+        })
+
+
+@app.route("/segment_auto_close", methods=["POST", "OPTIONS"])
+def segment_auto_close():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    data = request.get_json(silent=True) or {}
+    with AUTO_STATE_LOCK:
+        if data.get("image_id") == AUTO_STATE["image_id"]:
+            AUTO_STATE.update({
+                "image_id": None,
+                "image": None,
+                "work_image": None,
+                "objects": {},
+                "scale_x": 1.0,
+                "scale_y": 1.0,
+            })
+    return jsonify({"status": "success"})
+
+
 @app.errorhandler(413)
 def request_too_large(_error):
     return jsonify({"status": "error", "error": "Dữ liệu ảnh vượt giới hạn 250 MB."}), 413
