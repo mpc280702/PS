@@ -542,6 +542,18 @@ const autoSegHint = $('autoSegHint');
 const chkAutoCreateOverlay = $('chkAutoCreateOverlay');
 const chkAutoHideOriginal = $('chkAutoHideOriginal');
 
+if (chkAutoHideOriginal && chkAutoCreateOverlay) {
+    chkAutoHideOriginal.addEventListener('change', () => {
+        if (chkAutoHideOriginal.checked) chkAutoCreateOverlay.checked = true;
+    });
+    chkAutoCreateOverlay.addEventListener('change', () => {
+        if (chkAutoHideOriginal.checked && !chkAutoCreateOverlay.checked) {
+            chkAutoCreateOverlay.checked = true;
+            setAutoSegHint('Để ẩn layer gốc mà không tạo lỗ caro, lớp phủ bảo toàn phải được bật.', 'warning');
+        }
+    });
+}
+
 let autoSegImageId = null;
 let autoSegDocumentId = null;
 let autoSegTargetDoc = null;
@@ -749,6 +761,8 @@ async function setAutoBusy(busy) {
     if (btnClearPoints) btnClearPoints.disabled = busy;
     if (btnAddObject) btnAddObject.disabled = busy || !segmentationHasMask;
     if (segPointMode) segPointMode.disabled = busy;
+    if (chkAutoCreateOverlay) chkAutoCreateOverlay.disabled = busy;
+    if (chkAutoHideOriginal) chkAutoHideOriginal.disabled = busy;
     refreshAutoSelection();
 }
 
