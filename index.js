@@ -524,10 +524,13 @@ if (btnAddObject) {
             const layerName = requestedName || ('AI - Vật thể ' + String(segmentationLayerCount + 1).padStart(2, '0') + ' (SAM)');
             updateStatus('Đang thêm vật thể vào Photoshop…', 'Tạo layer độc lập và giữ nguyên kích thước canvas gốc.', 82, 'warning');
             await core.executeAsModal(async () => {
-                await importPngAsLayer(outputFile, targetDoc, layerName.slice(0, 80), {
-                    x: data.crop_x,
-                    y: data.crop_y
-                });
+                await importPngAsLayer(
+                    outputFile,
+                    targetDoc,
+                    layerName.slice(0, 80),
+                    { x: data.crop_x, y: data.crop_y },
+                    !!(chkPointLayerMask && chkPointLayerMask.checked)
+                );
             }, { commandName: 'AI Layer Splitter - Add SAM Object' });
 
             segmentationLayerCount += 1;
@@ -568,6 +571,8 @@ const autoSegSummary = $('autoSegSummary');
 const autoSegHint = $('autoSegHint');
 const chkAutoCreateOverlay = $('chkAutoCreateOverlay');
 const chkAutoHideOriginal = $('chkAutoHideOriginal');
+const chkBannerLayerMasks = $('chkBannerLayerMasks');
+const chkPointLayerMask = $('chkPointLayerMask');
 
 if (chkAutoHideOriginal && chkAutoCreateOverlay) {
     chkAutoHideOriginal.addEventListener('change', () => {
@@ -790,6 +795,8 @@ async function setAutoBusy(busy) {
     if (segPointMode) segPointMode.disabled = busy;
     if (chkAutoCreateOverlay) chkAutoCreateOverlay.disabled = busy;
     if (chkAutoHideOriginal) chkAutoHideOriginal.disabled = busy;
+    if (chkBannerLayerMasks) chkBannerLayerMasks.disabled = busy;
+    if (chkPointLayerMask) chkPointLayerMask.disabled = busy;
     refreshAutoSelection();
 }
 
@@ -953,7 +960,8 @@ if (btnImportMasks) {
                             remainderFile,
                             autoSegTargetDoc,
                             'AI - Lớp phủ bảo toàn banner',
-                            { x: remainder.crop_x, y: remainder.crop_y }
+                            { x: remainder.crop_x, y: remainder.crop_y },
+                            !!(chkBannerLayerMasks && chkBannerLayerMasks.checked)
                         );
                     }, { commandName: 'AI Layer Splitter - Import Preservation Overlay' });
                     importedCount += 1;
@@ -987,10 +995,13 @@ if (btnImportMasks) {
                 try {
                     await base64ToFile(response.foreground_base64, tempFile);
                     await core.executeAsModal(async () => {
-                        await importPngAsLayer(tempFile, autoSegTargetDoc, (item.layerName || item.name).trim().slice(0, 80), {
-                            x: response.crop_x,
-                            y: response.crop_y
-                        });
+                        await importPngAsLayer(
+                            tempFile,
+                            autoSegTargetDoc,
+                            (item.layerName || item.name).trim().slice(0, 80),
+                            { x: response.crop_x, y: response.crop_y },
+                            !!(chkBannerLayerMasks && chkBannerLayerMasks.checked)
+                        );
                     }, { commandName: 'AI Layer Splitter - Import Banner Part' });
                     importedCount += 1;
                 } finally {
@@ -1006,10 +1017,14 @@ if (btnImportMasks) {
                 }
             }
 
+            const maskStatus = chkBannerLayerMasks && chkBannerLayerMasks.checked
+                ? ' Mỗi layer mới đã được thêm kèm Layer Mask để chỉnh sửa viền bằng cọ.'
+                : ' Layer Mask đang tắt theo tùy chọn.';
             setAutoSegHint(
-                createPreservationOverlay
+                (createPreservationOverlay
                     ? 'Đã thêm ' + importedCount + ' layer, gồm “Lớp phủ bảo toàn banner” nằm dưới các phần tách để giữ pixel chưa nhận diện và tránh lỗ caro.'
-                    : 'Đã thêm ' + importedCount + ' layer riêng. Lớp phủ bảo toàn đang tắt; hãy giữ layer gốc hiển thị hoặc bật lớp phủ nếu không muốn xuất hiện vùng caro.',
+                    : 'Đã thêm ' + importedCount + ' layer riêng. Lớp phủ bảo toàn đang tắt; hãy giữ layer gốc hiển thị hoặc bật lớp phủ nếu không muốn xuất hiện vùng caro.')
+                    + maskStatus,
                 'success'
             );
             if (hideSourceAfterImport && !createPreservationOverlay) {
