@@ -33,7 +33,7 @@ jobs:
           import json
           from pathlib import Path
           manifest = json.loads(Path("manifest.json").read_text(encoding="utf-8"))
-          assert manifest["version"] == "2.5.0", manifest.get("version")
+          assert manifest["version"] == "2.6.0", manifest.get("version")
           html = Path("index.html").read_text(encoding="utf-8")
           required = [
               "btnAnalyzeBanner", "bannerSegQuality", "btnSelectMainMasks", "btnSelectAllMasks",
@@ -53,5 +53,8 @@ jobs:
           js = Path("index.js").read_text(encoding="utf-8")
           assert "importedLayer.translate" in js, "Missing cropped-layer placement"
           assert "x: response.crop_x" in js and "y: response.crop_y" in js, "Auto layer import does not restore canvas offsets"
-          print("Manifest, banner UI, multi-scale segmentation, cropped-layer placement and API contracts passed.")
+          assert '"__remainder__"' in server, "Missing complementary layer export"
+          assert "Import Remaining Artwork" in js, "Missing remainder layer import path"
+          assert "_group_nearby_banner_parts" in server, "Missing coherent component grouping"
+          print("Manifest, grouped banner components, remainder layer, cropped placement and API contracts passed.")
           PY
