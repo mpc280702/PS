@@ -546,6 +546,75 @@ AUTO_STATE: dict[str, Any] = {
 AUTO_STATE_LOCK = threading.RLock()
 
 
+
+def _group_nearby_banner_parts(items: list[dict[str, Any]], width: int, height: int) -> list[list[int]]:
+    """Group top-level masks that overlap or sit close enough to form one visual component."""
+    count = len(items)
+    if count <= 1:
+        return [[i] for i in range(count)]
+
+    parent = list(range(count))
+    bounds = []
+    for item in items:
+        x, y, w, h = item["bbox"]
+        bounds.append([x, y, x + w, y + h])
+
+    def find(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    component_bounds = [b[:] for b in bounds]
+    max_group_width = width * 0.78
+    max_group_height = height * 0.82
+    horizontal_gap_limit = max(8, width * 0.026)
+    vertical_gap_limit = max(8, height * 0.022)
+
+    for i in range(count):
+        ax1, ay1, ax2, ay2 = bounds[i]
+        aw, ah = ax2 - ax1, ay2 - ay1
+        a_ratio = items[i]["area"] / max(1, width * height)
+        a_broad = a_ratio >= 0.62 and aw / max(1, width) >= 0.78 and ah / max(1, height) >= 0.78
+        for j in range(i + 1, count):
+            bx1, by1, bx2, by2 = bounds[j]
+            bw, bh = bx2 - bx1, by2 - by1
+            b_ratio = items[j]["area"] / max(1, width * height)
+            b_broad = b_ratio >= 0.62 and bw / max(1, width) >= 0.78 and bh / max(1, height) >= 0.78
+            if a_broad or b_broad:
+                continue
+
+            gap_x = max(0, max(ax1, bx1) - min(ax2, bx2))
+            gap_y = max(0, max(ay1, by1) - min(ay2, by2))
+            overlap_x = max(0, min(ax2, bx2) - max(ax1, bx1)) / max(1, min(aw, bw))
+            overlap_y = max(0, min(ay2, by2) - max(ay1, by1)) / max(1, min(ah, bh))
+            close_horizontal = gap_x <= horizontal_gap_limit and overlap_y >= 0.24
+            close_vertical = gap_y <= vertical_gap_limit and overlap_x >= 0.24
+            overlap_bbox = gap_x == 0 and gap_y == 0 and overlap_x * overlap_y >= 0.18
+            if not (close_horizontal or close_vertical or overlap_bbox):
+                continue
+
+            root_a, root_b = find(i), find(j)
+            if root_a == root_b:
+                continue
+            a_bounds, b_bounds = component_bounds[root_a], component_bounds[root_b]
+            merged = [
+                min(a_bounds[0], b_bounds[0]),
+                min(a_bounds[1], b_bounds[1]),
+                max(a_bounds[2], b_bounds[2]),
+                max(a_bounds[3], b_bounds[3]),
+            ]
+            if merged[2] - merged[0] > max_group_width or merged[3] - merged[1] > max_group_height:
+                continue
+            parent[root_b] = root_a
+            component_bounds[root_a] = merged
+
+    groups: dict[int, list[int]] = {}
+    for index in range(count):
+        groups.setdefault(find(index), []).append(index)
+    return sorted(groups.values(), key=lambda group: max(items[i]["area"] for i in group), reverse=True)
+
+
 def _auto_object_name(index: int, bbox: tuple[int, int, int, int], image_size: tuple[int, int]) -> str:
     x, y, width, height = bbox
     canvas_w, canvas_h = image_size
@@ -744,8 +813,6 @@ def segment_auto():
         selected.sort(key=lambda item: item["area"], reverse=True)
 
         # Mark masks almost fully contained in another candidate as detail layers.
-        # Main groups are selected by default; nested masks stay available but
-        # are opt-in to avoid importing many duplicate/overlapping fragments.
         parent_indices: list[int | None] = []
         for child_index, child in enumerate(selected):
             child_parent = None
@@ -767,46 +834,145 @@ def segment_auto():
                     break
             parent_indices.append(child_parent)
 
+        # Build coherent spatial clusters from top-level SAM masks. This is a
+        # visual grouping heuristic, not semantic recognition: close/overlapping
+        # fragments can be exported as one banner component, while the individual
+        # fragments remain available as optional detail layers.
+        main_indices = [i for i, parent in enumerate(parent_indices) if parent is None]
+        main_candidates = [selected[i] for i in main_indices]
+        main_groups = _group_nearby_banner_parts(main_candidates, work_w, work_h)
+
         objects = {}
         response_objects = []
         scale_x = width / max(1, work_w)
         scale_y = height / max(1, work_h)
-        for index, item in enumerate(selected, start=1):
-            bx, by, bw, bh = item["bbox"]
-            object_id = f"auto-{index:03d}"
-            area_percent = round(item["area"] * 100.0 / max(1, total), 3)
+        main_index_to_group: dict[int, str] = {}
+        group_sizes: dict[str, int] = {}
+
+        def pack_mask(mask: np.ndarray, quality: float, stability: float, object_id: str,
+                      name: str, category: str, parent_id: str | None,
+                      default_selected: bool) -> None:
+            mask = np.asarray(mask, dtype=bool)
+            ys, xs = np.where(mask)
+            if xs.size == 0 or ys.size == 0:
+                return
+            bx, by = int(xs.min()), int(ys.min())
+            right, bottom = int(xs.max()) + 1, int(ys.max()) + 1
+            bw, bh = right - bx, bottom - by
             scaled_bbox = (
                 int(round(bx * scale_x)),
                 int(round(by * scale_y)),
                 max(1, int(round(bw * scale_x))),
                 max(1, int(round(bh * scale_y))),
             )
-            parent_index = parent_indices[index - 1]
-            parent_id = f"auto-{parent_index + 1:03d}" if parent_index is not None else None
-            is_main = parent_index is None
-            name = _auto_object_name(index, scaled_bbox, (width, height))
-            category = "Phần chính" if is_main else "Chi tiết"
-            preview = _auto_thumbnail(work_image, item["mask"], item["bbox"])
+            area = int(mask.sum())
+            preview = _auto_thumbnail(work_image, mask, (bx, by, bw, bh))
             objects[object_id] = {
-                "mask": item["mask"],
+                "mask": mask,
                 "bbox": scaled_bbox,
-                "area": item["area"],
-                "quality": item["quality"],
-                "stability": item["stability"],
+                "area": area,
+                "quality": quality,
+                "stability": stability,
                 "parent_id": parent_id,
-                "default_selected": is_main,
+                "default_selected": default_selected,
+                "name": name,
             }
             response_objects.append({
                 "id": object_id,
                 "name": name,
                 "category": category,
                 "parent_id": parent_id,
-                "default_selected": is_main,
-                "bbox": {"x": scaled_bbox[0], "y": scaled_bbox[1], "width": scaled_bbox[2], "height": scaled_bbox[3]},
-                "area_percent": area_percent,
-                "score": round(item["quality"], 3),
+                "default_selected": default_selected,
+                "bbox": {
+                    "x": scaled_bbox[0],
+                    "y": scaled_bbox[1],
+                    "width": scaled_bbox[2],
+                    "height": scaled_bbox[3],
+                },
+                "area_percent": round(area * 100.0 / max(1, total), 3),
+                "score": round(float(quality), 3),
                 "thumbnail_base64": preview,
             })
+
+        # Export groups first and choose those by default. Very broad masks
+        # covering nearly the entire composition are treated as optional backdrop
+        # candidates so they do not swallow the actual individual components.
+        for group_number, local_members in enumerate(main_groups, start=1):
+            member_indices = [main_indices[local] for local in local_members]
+            group_id = f"group-{group_number:03d}"
+            for selected_index in member_indices:
+                main_index_to_group[selected_index] = group_id
+            group_sizes[group_id] = len(member_indices)
+
+            group_mask = np.zeros((work_h, work_w), dtype=bool)
+            for selected_index in member_indices:
+                group_mask |= np.asarray(selected[selected_index]["mask"], dtype=bool)
+            group_area_ratio = float(group_mask.sum()) / max(1, total)
+            group_y, group_x = np.where(group_mask)
+            group_bbox = (
+                int(group_x.min()),
+                int(group_y.min()),
+                int(group_x.max() - group_x.min() + 1),
+                int(group_y.max() - group_y.min() + 1),
+            )
+            broad_scene_mask = (
+                group_area_ratio >= 0.62
+                and group_bbox[2] / max(1, work_w) >= 0.78
+                and group_bbox[3] / max(1, work_h) >= 0.78
+            )
+            scaled_group_bbox = (
+                int(round(group_bbox[0] * scale_x)),
+                int(round(group_bbox[1] * scale_y)),
+                max(1, int(round(group_bbox[2] * scale_x))),
+                max(1, int(round(group_bbox[3] * scale_y))),
+            )
+            group_name = _auto_object_name(group_number, scaled_group_bbox, (width, height))
+            if len(member_indices) > 1:
+                group_name = f"Cụm {group_number:02d} · " + group_name.split("·", 1)[-1].strip()
+            else:
+                group_name = f"Phần {group_number:02d} · " + group_name.split("·", 1)[-1].strip()
+            category = "Vùng bao cảnh" if broad_scene_mask else ("Cụm chính" if len(member_indices) > 1 else "Phần chính")
+            mean_quality = float(np.mean([selected[i]["quality"] for i in member_indices]))
+            mean_stability = float(np.mean([selected[i]["stability"] for i in member_indices]))
+            pack_mask(
+                group_mask, mean_quality, mean_stability, group_id, group_name,
+                category, None, not broad_scene_mask,
+            )
+
+        # Return individual masks as opt-in details. A singleton group needs no
+        # duplicate detail row, but split/overlapping groups expose their member
+        # masks so designers can refine a component at finer granularity.
+        for index, item in enumerate(selected, start=1):
+            is_main = parent_indices[index - 1] is None
+            root_index = index - 1
+            seen_roots = set()
+            while parent_indices[root_index] is not None and root_index not in seen_roots:
+                seen_roots.add(root_index)
+                root_index = int(parent_indices[root_index])
+            parent_group_id = main_index_to_group.get(root_index)
+
+            if is_main and parent_group_id and group_sizes.get(parent_group_id, 1) == 1:
+                continue
+
+            bx, by, bw, bh = item["bbox"]
+            scaled_bbox = (
+                int(round(bx * scale_x)),
+                int(round(by * scale_y)),
+                max(1, int(round(bw * scale_x))),
+                max(1, int(round(bh * scale_y))),
+            )
+            name = _auto_object_name(index, scaled_bbox, (width, height))
+            object_id = f"auto-{index:03d}"
+            pack_mask(
+                np.asarray(item["mask"], dtype=bool),
+                float(item["quality"]),
+                float(item["stability"]),
+                object_id,
+                f"Chi tiết {index:02d} · " + name.split("·", 1)[-1].strip(),
+                "Chi tiết",
+                parent_group_id,
+                False,
+            )
 
         image_id = uuid.uuid4().hex
         with AUTO_STATE_LOCK:
