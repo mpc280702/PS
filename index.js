@@ -636,10 +636,9 @@ function renderAutoObjectList(objects) {
         ...item,
         layerName: item.layerName || ('AI - ' + (item.category || 'Phần') + ' · ' + (item.name || item.id))
     }));
-    if (typeof autoSegObjectList.replaceChildren === 'function') {
-        autoSegObjectList.replaceChildren();
-    } else {
-        autoSegObjectList.innerHTML = '';
+    if (!autoSegObjectList) return;
+    while (autoSegObjectList.firstChild) {
+        autoSegObjectList.removeChild(autoSegObjectList.firstChild);
     }
 
     const objLen = autoSegObjects.length;
