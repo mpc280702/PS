@@ -320,13 +320,13 @@ if (btnLoadSegImage) {
             clearSegOverlay();
             updateSegPointLabel();
 
-            segPreviewImage.src = 'data:image/png;base64,' + imageBase64;
             segPreviewImage.onload = () => {
                 segOverlayCanvas.width = segPreviewImage.naturalWidth;
                 segOverlayCanvas.height = segPreviewImage.naturalHeight;
                 const ctx = segOverlayCanvas.getContext('2d');
                 ctx.clearRect(0, 0, segOverlayCanvas.width, segOverlayCanvas.height);
             };
+            segPreviewImage.src = 'data:image/png;base64,' + imageBase64;
             segPreviewWrap.hidden = false;
             btnClearPoints.disabled = false;
             setSegHint('Ảnh ' + data.width + ' × ' + data.height + 'px · Model SAM chạy trên ' +
@@ -349,8 +349,8 @@ if (btnLoadSegImage) {
 if (segPreviewImage) {
     segPreviewImage.addEventListener('click', async (event) => {
         if (!segmentationImageId || segmentationRequestInProgress) return;
-        if (segmentationDocumentId !== app.activeDocument.id) {
-            setSegHint('Tài liệu đang hoạt động đã thay đổi. Hãy nạp lại ảnh để tránh thêm layer nhầm tài liệu.', 'error');
+        if (!app.documents || app.documents.length === 0 || segmentationDocumentId !== app.activeDocument.id) {
+            setSegHint('Tài liệu đang hoạt động đã thay đổi hoặc đã đóng. Hãy nạp lại ảnh để tránh thêm layer nhầm tài liệu.', 'error');
             return;
         }
         const rect = segPreviewImage.getBoundingClientRect();
