@@ -165,6 +165,10 @@
               <button id="btnSelectAllMasks" class="btn-secondary" type="button" disabled>Chọn tất cả</button>
               <button id="btnSelectNoMasks" class="btn-secondary" type="button" disabled>Bỏ chọn</button>
             </div>
+            <div class="auto-seg-view-toggle">
+              <button id="btnViewList" class="btn-icon-toggle active" type="button" title="Dạng danh sách">☰ Danh sách</button>
+              <button id="btnViewGrid" class="btn-icon-toggle" type="button" title="Dạng lưới ảnh to">⊞ Lưới ảnh to</button>
+            </div>
           </div>
 
           <button id="btnImportMasks" class="btn-primary auto-import" type="button" disabled>
@@ -173,7 +177,7 @@
 
           <div id="autoSegObjectList" class="auto-seg-object-list" role="list" aria-label="Các vùng AI phát hiện"></div>
 
-          <p id="autoSegHint" class="seg-hint">Mở banner trong Photoshop rồi bấm "Phân tích toàn banner".</p>
+          <p id="autoSegHint" class="seg-hint">Mở banner trong Photoshop rồi bấm "Phân tích toàn banner". Bấm vào ảnh nhỏ để phóng to xem chi tiết.</p>
         </div>
       </section>
     </div>
@@ -228,6 +232,23 @@
           <p id="segHint" class="seg-hint">Bấm "Nạp ảnh từ Photoshop" để bắt đầu.</p>
         </div>
       </section>
+    </div>
+
+    <!-- Zoom Preview Lightbox Modal -->
+    <div id="imageZoomModal" class="zoom-modal" hidden>
+      <div class="zoom-modal-backdrop"></div>
+      <div class="zoom-modal-dialog">
+        <div class="zoom-modal-header">
+          <strong id="zoomModalTitle">Chi tiết vùng tách</strong>
+          <button id="btnZoomModalClose" class="zoom-close-btn" type="button" aria-label="Đóng">✕</button>
+        </div>
+        <div class="zoom-modal-body">
+          <div class="zoom-img-wrap">
+            <img id="zoomModalImg" alt="Phóng to ảnh">
+          </div>
+          <div id="zoomModalMeta" class="zoom-modal-meta"></div>
+        </div>
+      </div>
     </div>
 
     <footer class="footer">

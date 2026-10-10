@@ -40,4 +40,20 @@
     if (detailText) detailText.textContent = "Trình duyệt GitHub Pages không kiểm tra được AI Server cục bộ một cách đáng tin cậy. Hãy mở panel AI Layer Splitter bên trong Photoshop rồi bấm Kiểm tra AI Server.";
     if (statusDot) statusDot.className = "status-dot warning";
   });
+
+  var btnViewList = $("btnViewList");
+  var btnViewGrid = $("btnViewGrid");
+  var autoSegObjectList = $("autoSegObjectList");
+  if (btnViewList && btnViewGrid && autoSegObjectList) {
+    btnViewList.addEventListener("click", function () {
+      btnViewList.classList.add("active");
+      btnViewGrid.classList.remove("active");
+      autoSegObjectList.classList.remove("gallery-mode");
+    });
+    btnViewGrid.addEventListener("click", function () {
+      btnViewGrid.classList.add("active");
+      btnViewList.classList.remove("active");
+      autoSegObjectList.classList.add("gallery-mode");
+    });
+  }
 }());

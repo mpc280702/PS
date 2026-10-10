@@ -530,6 +530,48 @@ function refreshAutoSelection() {
     }
 }
 
+function openImageZoom(item) {
+    const modal = document.getElementById('imageZoomModal');
+    const modalImg = document.getElementById('zoomModalImg');
+    const modalTitle = document.getElementById('zoomModalTitle');
+    const modalMeta = document.getElementById('zoomModalMeta');
+    if (!modal || !modalImg) return;
+
+    modalImg.src = 'data:image/png;base64,' + item.thumbnail_base64;
+    if (modalTitle) modalTitle.textContent = item.name;
+    if (modalMeta) {
+        modalMeta.innerHTML = '<strong>' + (item.layerName || item.name) + '</strong><br>' +
+            item.bbox.width + ' × ' + item.bbox.height + ' px · ' +
+            item.area_percent + '% diện tích · Điểm AI: ' + Math.round(item.score * 100) + '%';
+    }
+    modal.hidden = false;
+}
+
+function closeImageZoom() {
+    const modal = document.getElementById('imageZoomModal');
+    if (modal) modal.hidden = true;
+}
+
+const btnZoomModalClose = document.getElementById('btnZoomModalClose');
+if (btnZoomModalClose) btnZoomModalClose.addEventListener('click', closeImageZoom);
+const zoomBackdrop = document.querySelector('.zoom-modal-backdrop');
+if (zoomBackdrop) zoomBackdrop.addEventListener('click', closeImageZoom);
+
+const btnViewList = document.getElementById('btnViewList');
+const btnViewGrid = document.getElementById('btnViewGrid');
+if (btnViewList && btnViewGrid && autoSegObjectList) {
+    btnViewList.addEventListener('click', () => {
+        btnViewList.classList.add('active');
+        btnViewGrid.classList.remove('active');
+        autoSegObjectList.classList.remove('gallery-mode');
+    });
+    btnViewGrid.addEventListener('click', () => {
+        btnViewGrid.classList.add('active');
+        btnViewList.classList.remove('active');
+        autoSegObjectList.classList.add('gallery-mode');
+    });
+}
+
 function renderAutoObjectList(objects) {
     autoSegObjects = (objects || []).map(item => ({
         ...item,
@@ -551,10 +593,16 @@ function renderAutoObjectList(objects) {
 
         const thumb = document.createElement('div');
         thumb.className = 'auto-mask-thumb';
+        thumb.title = 'Bấm để phóng to xem chi tiết';
         const image = document.createElement('img');
         image.alt = 'Xem trước ' + item.name;
         image.src = 'data:image/png;base64,' + item.thumbnail_base64;
         thumb.appendChild(image);
+
+        thumb.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openImageZoom(item);
+        });
 
         const copy = document.createElement('div');
         copy.className = 'auto-mask-copy';
@@ -584,6 +632,16 @@ function renderAutoObjectList(objects) {
             row.classList.toggle('is-checked', checkbox.checked);
             refreshAutoSelection();
         });
+
+        row.addEventListener('click', (e) => {
+            if (e.target.closest && (e.target.closest('.auto-mask-thumb') || e.target.closest('.auto-mask-name'))) return;
+            if (e.target !== checkbox) {
+                checkbox.checked = !checkbox.checked;
+                row.classList.toggle('is-checked', checkbox.checked);
+                refreshAutoSelection();
+            }
+        });
+
         copy.append(title, meta, confidence, nameInput);
         row.append(checkbox, thumb, copy);
         autoSegObjectList.appendChild(row);
