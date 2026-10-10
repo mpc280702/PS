@@ -186,6 +186,285 @@ async function importPngAsLayer(file, targetDoc, name) {
     }
 }
 
+
+/* Click-to-select individual object using the optional local SAM model. */
+const btnLoadSegImage = $('btnLoadSegImage');
+const btnClearPoints = $('btnClearPoints');
+const btnAddObject = $('btnAddObject');
+const segPointMode = $('segPointMode');
+const segPreviewWrap = $('segPreviewWrap');
+const segPreviewImage = $('segPreviewImage');
+const segOverlayCanvas = $('segOverlayCanvas');
+const segPointCount = $('segPointCount');
+const segScore = $('segScore');
+const segObjectName = $('segObjectName');
+const segHint = $('segHint');
+
+let segmentationImageId = null;
+let segmentationDocumentId = null;
+let segmentationPoints = [];
+let segmentationLayerCount = 0;
+let segmentationRequestInProgress = false;
+let segmentationHasMask = false;
+
+function setSegHint(message, type = '') {
+    if (!segHint) return;
+    segHint.textContent = message || '';
+    segHint.className = 'seg-hint' + (type ? ' ' + type : '');
+}
+
+function clearSegOverlay() {
+    if (segOverlayCanvas) {
+        const ctx = segOverlayCanvas.getContext('2d');
+        ctx.clearRect(0, 0, segOverlayCanvas.width, segOverlayCanvas.height);
+    }
+    segmentationHasMask = false;
+    if (btnAddObject) btnAddObject.disabled = true;
+    if (segScore) segScore.textContent = '';
+}
+
+function drawSegOverlay(overlayBase64) {
+    return new Promise((resolve, reject) => {
+        const overlayImage = new Image();
+        overlayImage.onload = () => {
+            const width = segPreviewImage.naturalWidth;
+            const height = segPreviewImage.naturalHeight;
+            segOverlayCanvas.width = width;
+            segOverlayCanvas.height = height;
+            const ctx = segOverlayCanvas.getContext('2d');
+            ctx.clearRect(0, 0, width, height);
+            ctx.drawImage(overlayImage, 0, 0, width, height);
+            for (const point of segmentationPoints) {
+                const positive = point.label === 1;
+                ctx.beginPath();
+                ctx.arc(point.x, point.y, Math.max(5, Math.round(width / 180)), 0, Math.PI * 2);
+                ctx.fillStyle = positive ? '#23e69b' : '#ff6677';
+                ctx.fill();
+                ctx.lineWidth = Math.max(2, Math.round(width / 500));
+                ctx.strokeStyle = '#10141d';
+                ctx.stroke();
+            }
+            resolve();
+        };
+        overlayImage.onerror = () => reject(new Error('Không hiển thị được lớp phủ vùng chọn.'));
+        overlayImage.src = 'data:image/png;base64,' + overlayBase64;
+    });
+}
+
+function updateSegPointLabel() {
+    const positive = segmentationPoints.filter(point => point.label === 1).length;
+    const negative = segmentationPoints.filter(point => point.label === 0).length;
+    if (segPointCount) {
+        segPointCount.textContent = segmentationPoints.length
+            ? (segmentationPoints.length + ' điểm · +' + positive + ' giữ · −' + negative + ' loại')
+            : 'Chưa có điểm chọn';
+    }
+}
+
+async function postSegmentation(path, body, timeoutMs = 600000) {
+    const response = await requestFromServer(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    }, timeoutMs);
+    let data;
+    try {
+        data = await response.json();
+    } catch (_) {
+        throw new Error('AI Server trả về dữ liệu không hợp lệ (HTTP ' + response.status + ').');
+    }
+    if (!response.ok || data.status !== 'success') {
+        throw new Error(data.error || ('Yêu cầu tách vật thể thất bại (HTTP ' + response.status + ').'));
+    }
+    return data;
+}
+
+if (btnLoadSegImage) {
+    btnLoadSegImage.addEventListener('click', async () => {
+        if (segmentationRequestInProgress) return;
+        if (!app.documents || app.documents.length === 0) {
+            setSegHint('Hãy mở một ảnh trong Photoshop trước.', 'error');
+            updateStatus('Chưa có ảnh đang mở', 'Mở tài liệu Photoshop rồi nạp ảnh vào vùng chọn vật thể.', 0, 'warning');
+            return;
+        }
+
+        segmentationRequestInProgress = true;
+        btnLoadSegImage.disabled = true;
+        btnClearPoints.disabled = true;
+        btnAddObject.disabled = true;
+        let exportFile = null;
+        try {
+            const sourceDoc = app.activeDocument;
+            const sourceId = sourceDoc.id;
+            const tempFolder = await fs.getTemporaryFolder();
+            exportFile = await tempFolder.createFile('ai_sam_input_' + Date.now() + '.png', { overwrite: true });
+
+            updateStatus('Đang chuẩn bị ảnh cho SAM…', 'Xuất ảnh hợp nhất từ Photoshop; tài liệu gốc không bị thay đổi.', 8, 'warning');
+            await exportCompositeToPng(sourceDoc, exportFile);
+            const imageBase64 = await fileToBase64(exportFile);
+
+            if (segmentationImageId) {
+                try {
+                    await postSegmentation('/segment_close', { image_id: segmentationImageId }, 5000);
+                } catch (_) { /* Starting a new selection may replace an expired session. */ }
+            }
+
+            updateStatus('Đang khởi tạo model tách vật thể…', 'Lần đầu có thể mất thời gian để nạp SAM vào bộ nhớ.', 25, 'warning');
+            setSegHint('Đang nạp model SAM và mã hóa ảnh…');
+
+            const data = await postSegmentation('/segment_init', { image_base64: imageBase64 }, 600000);
+            segmentationImageId = data.image_id;
+            segmentationDocumentId = sourceId;
+            segmentationPoints = [];
+            segmentationLayerCount = 0;
+            clearSegOverlay();
+            updateSegPointLabel();
+
+            segPreviewImage.src = 'data:image/png;base64,' + imageBase64;
+            segPreviewImage.onload = () => {
+                segOverlayCanvas.width = segPreviewImage.naturalWidth;
+                segOverlayCanvas.height = segPreviewImage.naturalHeight;
+                const ctx = segOverlayCanvas.getContext('2d');
+                ctx.clearRect(0, 0, segOverlayCanvas.width, segOverlayCanvas.height);
+            };
+            segPreviewWrap.hidden = false;
+            btnClearPoints.disabled = false;
+            setSegHint('Ảnh ' + data.width + ' × ' + data.height + 'px · Model SAM chạy trên ' +
+                (data.device === 'cuda' ? 'GPU' : 'CPU') + '. Bấm vào vật thể để tạo vùng chọn.');
+            updateStatus('Ảnh đã sẵn sàng để chọn vật thể', 'Bấm vào bên trong vật thể. Hãy thêm điểm − nếu vùng chọn ăn sang phần khác.', 100, 'success');
+        } catch (error) {
+            console.error('[SAM segmentation init]', error);
+            setSegHint(error.message || String(error), 'error');
+            updateStatus('Không khởi tạo được chế độ tách chi tiết', error.message || String(error), 0, 'error');
+        } finally {
+            if (exportFile) {
+                try { await exportFile.delete(); } catch (_) { /* Best-effort temporary cleanup. */ }
+            }
+            segmentationRequestInProgress = false;
+            btnLoadSegImage.disabled = false;
+        }
+    });
+}
+
+if (segPreviewImage) {
+    segPreviewImage.addEventListener('click', async (event) => {
+        if (!segmentationImageId || segmentationRequestInProgress) return;
+        if (segmentationDocumentId !== app.activeDocument.id) {
+            setSegHint('Tài liệu đang hoạt động đã thay đổi. Hãy nạp lại ảnh để tránh thêm layer nhầm tài liệu.', 'error');
+            return;
+        }
+        const rect = segPreviewImage.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        const x = Math.max(0, Math.min(segPreviewImage.naturalWidth - 1,
+            Math.round((event.clientX - rect.left) * segPreviewImage.naturalWidth / rect.width)));
+        const y = Math.max(0, Math.min(segPreviewImage.naturalHeight - 1,
+            Math.round((event.clientY - rect.top) * segPreviewImage.naturalHeight / rect.height)));
+        const label = Number(segPointMode.value);
+        if (label === 0 && !segmentationPoints.some(point => point.label === 1)) {
+            setSegHint('Hãy chấm một điểm + bên trong vật thể trước, sau đó mới dùng điểm −.', 'error');
+            return;
+        }
+        if (segmentationPoints.length >= 16) {
+            setSegHint('Đã đạt giới hạn 16 điểm. Xóa điểm hoặc thêm layer này trước.', 'error');
+            return;
+        }
+
+        segmentationPoints.push({ x: x, y: y, label: label });
+        updateSegPointLabel();
+        segmentationRequestInProgress = true;
+        btnLoadSegImage.disabled = true;
+        btnClearPoints.disabled = true;
+        btnAddObject.disabled = true;
+        setSegHint('Đang tính lại vùng chọn theo các điểm +/−…');
+        updateStatus('Đang tách vùng chọn…', 'SAM đang tìm biên của vật thể và cập nhật mặt nạ.', 55, 'warning');
+        try {
+            const data = await postSegmentation('/segment_point', {
+                image_id: segmentationImageId,
+                points: segmentationPoints
+            }, 600000);
+            await drawSegOverlay(data.overlay_base64);
+            segmentationHasMask = true;
+            btnAddObject.disabled = false;
+            const scoreText = 'Độ tin cậy ' + Math.round(data.score * 100) + '% · ' + data.area_percent + '% ảnh';
+            if (segScore) segScore.textContent = scoreText;
+            setSegHint('Kiểm tra lớp phủ màu xanh. Nếu bị dính vùng khác, chọn − rồi bấm vào vùng cần bỏ; nếu thiếu phần vật thể, chọn + và bấm thêm.', 'success');
+            updateStatus('Đã tạo vùng chọn vật thể', scoreText, 100, 'success');
+        } catch (error) {
+            console.error('[SAM point prediction]', error);
+            segmentationPoints.pop();
+            updateSegPointLabel();
+            setSegHint(error.message || String(error), 'error');
+            updateStatus('Chưa tạo được vùng chọn', error.message || String(error), 0, 'error');
+        } finally {
+            segmentationRequestInProgress = false;
+            btnLoadSegImage.disabled = false;
+            btnClearPoints.disabled = false;
+        }
+    });
+}
+
+if (btnClearPoints) {
+    btnClearPoints.addEventListener('click', () => {
+        if (segmentationRequestInProgress) return;
+        segmentationPoints = [];
+        clearSegOverlay();
+        updateSegPointLabel();
+        setSegHint('Đã xóa điểm chọn. Bấm + vào một vật thể khác để bắt đầu vùng chọn mới.');
+        updateStatus('Sẵn sàng chọn vật thể tiếp theo', 'Các layer đã thêm trước đó vẫn được giữ nguyên.', 0, 'warning');
+    });
+}
+
+if (btnAddObject) {
+    btnAddObject.addEventListener('click', async () => {
+        if (!segmentationImageId || !segmentationHasMask || segmentationRequestInProgress) return;
+        if (!app.documents || app.documents.length === 0 || segmentationDocumentId !== app.activeDocument.id) {
+            setSegHint('Tài liệu đang hoạt động đã thay đổi. Hãy nạp lại ảnh trước khi thêm layer.', 'error');
+            return;
+        }
+
+        segmentationRequestInProgress = true;
+        btnAddObject.disabled = true;
+        btnLoadSegImage.disabled = true;
+        btnClearPoints.disabled = true;
+        let outputFile = null;
+        try {
+            updateStatus('Đang tạo PNG trong suốt…', 'Giữ lại pixel nằm trong vùng chọn, phần còn lại trong suốt.', 65, 'warning');
+            const data = await postSegmentation('/segment_export', { image_id: segmentationImageId }, 600000);
+            const tempFolder = await fs.getTemporaryFolder();
+            outputFile = await tempFolder.createFile('ai_sam_object_' + Date.now() + '.png', { overwrite: true });
+            await base64ToFile(data.foreground_base64, outputFile);
+
+            const targetDoc = app.activeDocument;
+            const requestedName = segObjectName && segObjectName.value ? segObjectName.value.trim() : '';
+            const layerName = requestedName || ('AI - Vật thể ' + String(segmentationLayerCount + 1).padStart(2, '0') + ' (SAM)');
+            updateStatus('Đang thêm vật thể vào Photoshop…', 'Tạo layer độc lập và giữ nguyên kích thước canvas gốc.', 82, 'warning');
+            await core.executeAsModal(async () => {
+                await importPngAsLayer(outputFile, targetDoc, layerName.slice(0, 80));
+            }, { commandName: 'AI Layer Splitter - Add SAM Object' });
+
+            segmentationLayerCount += 1;
+            segmentationPoints = [];
+            clearSegOverlay();
+            updateSegPointLabel();
+            if (segObjectName) segObjectName.value = '';
+            setSegHint('Đã thêm layer "' + layerName + '". Bạn có thể chọn vật thể tiếp theo trên cùng ảnh.', 'success');
+            updateStatus('Đã thêm layer vật thể', 'Tổng số layer vật thể đã thêm trong phiên này: ' + segmentationLayerCount + '.', 100, 'success');
+        } catch (error) {
+            console.error('[SAM export/import]', error);
+            setSegHint(error.message || String(error), 'error');
+            updateStatus('Không thêm được layer', error.message || String(error), 0, 'error');
+        } finally {
+            if (outputFile) {
+                try { await outputFile.delete(); } catch (_) { /* Best-effort temporary cleanup. */ }
+            }
+            segmentationRequestInProgress = false;
+            btnLoadSegImage.disabled = false;
+            btnClearPoints.disabled = false;
+            btnAddObject.disabled = !segmentationHasMask;
+        }
+    });
+}
+
 btnCheck.addEventListener('click', async () => {
     if (btnCheck.disabled) return;
     btnCheck.disabled = true;
