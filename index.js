@@ -67,44 +67,83 @@ async function checkServer(showStatus = true) {
     }
 }
 
-async function fileToBase64(file) {
-    let base64Data = '';
-    try {
-        base64Data = await file.read({ format: formats.base64 });
-    } catch (readError) {
-        const arrayBuffer = await file.read({ format: formats.binary });
-        const bytes = new Uint8Array(arrayBuffer);
+function arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    if (typeof btoa === 'function') {
         let binary = '';
-        const chunkSize = 0x8000;
-        for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-            const chunk = bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length));
+        const chunkSize = 8192;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+            const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
             binary += String.fromCharCode.apply(null, chunk);
         }
-        base64Data = btoa(binary);
+        return btoa(binary);
     }
-    return String(base64Data || '')
-        .replace(/^data:image\/[^;]+;base64,/i, '')
-        .replace(/[\r\n\s]/g, '');
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    const len = bytes.length;
+    let base64 = '';
+    for (let i = 0; i < len; i += 3) {
+        const b0 = bytes[i];
+        const b1 = i + 1 < len ? bytes[i + 1] : 0;
+        const b2 = i + 2 < len ? bytes[i + 2] : 0;
+        base64 += chars[b0 >> 2];
+        base64 += chars[((b0 & 3) << 4) | (b1 >> 4)];
+        base64 += (i + 1 < len) ? chars[((b1 & 15) << 2) | (b2 >> 6)] : '=';
+        base64 += (i + 2 < len) ? chars[b2 & 63] : '=';
+    }
+    return base64;
+}
+
+function base64ToArrayBuffer(base64Data) {
+    if (typeof base64Data !== 'string' || !base64Data.length) {
+        throw new Error('Dữ liệu ảnh trả về đang trống.');
+    }
+    const cleanData = base64Data.replace(/^data:image\/[^;]+;base64,/i, '').replace(/[\r\n\s]/g, '');
+    if (typeof atob === 'function') {
+        let binary;
+        try {
+            binary = atob(cleanData);
+        } catch (_) {
+            throw new Error('Dữ liệu Base64 trả về không thể giải mã.');
+        }
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes.buffer;
+    }
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    const lookup = new Uint8Array(256);
+    for (let i = 0; i < chars.length; i++) lookup[chars.charCodeAt(i)] = i;
+    let len = cleanData.length;
+    let padding = 0;
+    if (cleanData.endsWith('==')) padding = 2;
+    else if (cleanData.endsWith('=')) padding = 1;
+    const bytesLen = (len * 3 / 4) - padding;
+    const bytes = new Uint8Array(bytesLen);
+    let byteIdx = 0;
+    for (let i = 0; i < len; i += 4) {
+        const c1 = lookup[cleanData.charCodeAt(i)];
+        const c2 = lookup[cleanData.charCodeAt(i + 1)];
+        const c3 = lookup[cleanData.charCodeAt(i + 2)];
+        const c4 = lookup[cleanData.charCodeAt(i + 3)];
+        bytes[byteIdx++] = (c1 << 2) | (c2 >> 4);
+        if (byteIdx < bytesLen) bytes[byteIdx++] = ((c2 & 15) << 4) | (c3 >> 2);
+        if (byteIdx < bytesLen) bytes[byteIdx++] = ((c3 & 3) << 6) | c4;
+    }
+    return bytes.buffer;
+}
+
+async function fileToBase64(file) {
+    const arrayBuffer = await file.read({ format: formats.binary });
+    return arrayBufferToBase64(arrayBuffer);
 }
 
 async function base64ToFile(base64Data, file) {
     if (typeof base64Data !== 'string' || !base64Data.length) {
         throw new Error(`Dữ liệu ảnh trả về cho ${file.name} đang trống.`);
     }
-    const cleanData = base64Data.replace(/^data:image\/[^;]+;base64,/i, '').replace(/[\r\n\s]/g, '');
-    try {
-        await file.write(cleanData, { format: formats.base64 });
-    } catch (err) {
-        let binary;
-        try {
-            binary = atob(cleanData);
-        } catch (_) {
-            throw new Error(`Dữ liệu Base64 của ${file.name} không hợp lệ.`);
-        }
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        await file.write(bytes.buffer, { format: formats.binary });
-    }
+    const buffer = base64ToArrayBuffer(base64Data);
+    await file.write(buffer, { format: formats.binary });
 }
 
 async function exportCompositeToPng(sourceDoc, exportFile) {
@@ -168,6 +207,10 @@ btnProcess.addEventListener('click', async () => {
 
     const extractSubject = $('chkPerson').checked;
     const inpaintBackground = $('chkInpaint').checked;
+    const model = $('selModel') ? $('selModel').value : 'isnet-general-use';
+    const fillHoles = $('chkFillHoles') ? $('chkFillHoles').checked : true;
+    const refineEdges = $('chkRefineEdges') ? $('chkRefineEdges').checked : true;
+
     if (!extractSubject && !inpaintBackground) {
         updateStatus('Chưa chọn tác vụ', 'Hãy bật ít nhất một tuỳ chọn xử lý.', 0, 'warning');
         return;
@@ -192,7 +235,7 @@ btnProcess.addEventListener('click', async () => {
         updateStatus('Đang chuẩn bị ảnh…', 'Tạo bản xuất hợp nhất, không chỉnh sửa tài liệu gốc.', 12);
         await exportCompositeToPng(sourceDoc, exportFile);
 
-        updateStatus('Đang gửi ảnh tới AI…', 'Đang phân tích chủ thể. Ảnh lớn có thể cần thêm thời gian.', 28);
+        updateStatus('Đang gửi ảnh tới AI…', `Phân tích AI với mô hình ${model}. Ảnh lớn có thể cần thêm thời gian.`, 28);
         const imageBase64 = await fileToBase64(exportFile);
         const response = await requestFromServer('/process', {
             method: 'POST',
@@ -200,7 +243,11 @@ btnProcess.addEventListener('click', async () => {
             body: JSON.stringify({
                 image_base64: imageBase64,
                 extract_subject: extractSubject,
-                inpaint_background: inpaintBackground
+                inpaint_background: inpaintBackground,
+                model: model,
+                fill_holes: fillHoles,
+                refine_edges: refineEdges,
+                remove_speckles: true
             })
         }, 300000);
 
@@ -216,7 +263,7 @@ btnProcess.addEventListener('click', async () => {
         if (extractSubject && !data.foreground_base64) throw new Error('Server không trả về layer chủ thể.');
         if (inpaintBackground && !data.background_base64) throw new Error('Server không trả về layer nền.');
 
-        updateStatus('Đang chuẩn bị các layer…', `Ảnh ${data.width} × ${data.height}px · Đang tạo file trung gian.`, 65);
+        updateStatus('Đang chuẩn bị các layer…', `Ảnh ${data.width} × ${data.height}px (${data.model}) · Xong trong ${data.elapsed_seconds}s.`, 65);
         const resultFiles = {};
         if (inpaintBackground) {
             resultFiles.background = await tempFolder.createFile('ai_layer_splitter_background.png', { overwrite: true });
@@ -235,7 +282,8 @@ btnProcess.addEventListener('click', async () => {
                 await importPngAsLayer(resultFiles.background, sourceDoc, 'AI - Nền đã bù (OpenCV)');
             }
             if (extractSubject) {
-                await importPngAsLayer(resultFiles.foreground, sourceDoc, 'AI - Chủ thể tách rời');
+                const layerLabel = data.model === 'isnet-general-use' ? 'AI - Chủ thể siêu nét (IS-Net)' : `AI - Chủ thể (${data.model || 'Tách rời'})`;
+                await importPngAsLayer(resultFiles.foreground, sourceDoc, layerLabel);
             }
             // Only hide originals after all requested result layers were imported successfully.
             if (inpaintBackground) {

@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="style.css">
     <title>AI Auto Layer Splitter</title>
 </head>
+
 <body>
     <main class="container">
         <header class="header">
@@ -17,6 +19,17 @@
         </header>
 
         <section class="options" aria-label="Tuỳ chọn xử lý">
+            <div class="model-select-group">
+                <label for="selModel" class="field-label">
+                    <strong>Chất lượng tách (Model AI):</strong>
+                </label>
+                <select id="selModel" class="model-select">
+                    <option value="isnet-general-use" selected>Siêu nét (IS-Net) · Banner, Đồ họa</option>
+                    <option value="u2net">Tiêu chuẩn (U2-Net Full) · Cân bằng</option>
+                    <option value="u2netp">Nhanh nhẹ (U2-Net Lite) · Tốc độ cao</option>
+                </select>
+            </div>
+            <div class="option-divider"></div>
             <label class="option-row" for="chkPerson">
                 <input type="checkbox" id="chkPerson" checked>
                 <span class="option-copy">
@@ -25,11 +38,27 @@
                 </span>
             </label>
             <div class="option-divider"></div>
-            <label class="option-row" for="chkInpaint">
-                <input type="checkbox" id="chkInpaint" checked>
+            <label class="option-row" for="chkFillHoles">
+                <input type="checkbox" id="chkFillHoles" checked>
                 <span class="option-copy">
-                    <strong>Bù nền sau khi tách</strong>
-                    <small>Tạo layer nền đã xoá chủ thể bằng OpenCV</small>
+                    <strong>Lấp lỗ rỗng bên trong (Khuyên dùng)</strong>
+                    <small>Tránh thủng touchpad, phím, màn hình laptop</small>
+                </span>
+            </label>
+            <div class="option-divider"></div>
+            <label class="option-row" for="chkRefineEdges">
+                <input type="checkbox" id="chkRefineEdges" checked>
+                <span class="option-copy">
+                    <strong>Làm mịn viền &amp; Khử răng cưa</strong>
+                    <small>Khử viền trắng lem, làm nét viền chữ &amp; icon</small>
+                </span>
+            </label>
+            <div class="option-divider"></div>
+            <label class="option-row" for="chkInpaint">
+                <input type="checkbox" id="chkInpaint">
+                <span class="option-copy">
+                    <strong>Bù nền sau khi tách (OpenCV Inpainting)</strong>
+                    <small>Tạo layer nền đã xóa chủ thể (phù hợp nền đơn giản)</small>
                 </span>
             </label>
         </section>
@@ -44,7 +73,8 @@
                 <span class="status-dot" id="statusDot"></span>
                 <strong id="statusText">Sẵn sàng</strong>
             </div>
-            <div class="progress-track" role="progressbar" aria-label="Tiến trình xử lý" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="progress-track" role="progressbar" aria-label="Tiến trình xử lý" aria-valuemin="0"
+                aria-valuemax="100" aria-valuenow="0">
                 <div id="progressBar" class="progress-fill"></div>
             </div>
             <p id="detailText" class="detail-text">Mở ảnh trong Photoshop, chọn các tuỳ chọn rồi bắt đầu.</p>
@@ -54,4 +84,5 @@
     </main>
     <script src="index.js"></script>
 </body>
+
 </html>
