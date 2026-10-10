@@ -1,0 +1,5 @@
+# Optional dependency for the click-to-select SAM segmentation mode.
+# Install PyTorch + TorchVision first using https://pytorch.org/get-started/locally/
+# Then install this package with:
+#   python -m pip install -r requirements_sam.txt
+git+https://github.com/facebookresearch/segment-anything.git
