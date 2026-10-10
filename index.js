@@ -477,6 +477,279 @@ if (btnAddObject) {
     });
 }
 
+
+/* Full-banner decomposition: generate candidate masks, preview and import selected layers. */
+const btnAnalyzeBanner = $('btnAnalyzeBanner');
+const btnSelectAllMasks = $('btnSelectAllMasks');
+const btnSelectNoMasks = $('btnSelectNoMasks');
+const btnImportMasks = $('btnImportMasks');
+const bannerSegQuality = $('bannerSegQuality');
+const autoSegObjectList = $('autoSegObjectList');
+const autoSegSummary = $('autoSegSummary');
+const autoSegHint = $('autoSegHint');
+const chkAutoHideOriginal = $('chkAutoHideOriginal');
+
+let autoSegImageId = null;
+let autoSegDocumentId = null;
+let autoSegTargetDoc = null;
+let autoSegOriginalLayers = [];
+let autoSegObjects = [];
+let autoSegBusy = false;
+
+function setAutoSegHint(message, type = '') {
+    if (!autoSegHint) return;
+    autoSegHint.textContent = message || '';
+    autoSegHint.className = 'seg-hint' + (type ? ' ' + type : '');
+}
+
+function selectedAutoObjects() {
+    if (!autoSegObjectList) return [];
+    const selectedIds = new Set(
+        Array.from(autoSegObjectList.querySelectorAll('.auto-mask-checkbox:checked'))
+            .map(input => input.dataset.objectId)
+    );
+    return autoSegObjects.filter(item => selectedIds.has(item.id));
+}
+
+function refreshAutoSelection() {
+    const selectedCount = selectedAutoObjects().length;
+    const totalCount = autoSegObjects.length;
+    if (autoSegSummary && totalCount) {
+        autoSegSummary.hidden = false;
+        autoSegSummary.textContent = selectedCount + ' / ' + totalCount + ' vùng được chọn';
+    }
+    if (btnImportMasks) btnImportMasks.disabled = autoSegBusy || selectedCount === 0;
+    if (btnSelectAllMasks) btnSelectAllMasks.disabled = autoSegBusy || totalCount === 0;
+    if (btnSelectNoMasks) btnSelectNoMasks.disabled = autoSegBusy || totalCount === 0;
+    if (autoSegObjectList) {
+        autoSegObjectList.querySelectorAll('input, button').forEach(control => {
+            control.disabled = autoSegBusy;
+        });
+        // Keep the main import button disabled if no region is checked.
+        if (btnImportMasks) btnImportMasks.disabled = autoSegBusy || selectedCount === 0;
+    }
+}
+
+function renderAutoObjectList(objects) {
+    autoSegObjects = (objects || []).map(item => ({
+        ...item,
+        layerName: item.name || ('AI - Banner part ' + item.id)
+    }));
+    autoSegObjectList.replaceChildren();
+
+    for (const item of autoSegObjects) {
+        const row = document.createElement('div');
+        row.className = 'auto-mask-card';
+        row.setAttribute('role', 'listitem');
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'auto-mask-checkbox';
+        checkbox.checked = true;
+        checkbox.dataset.objectId = item.id;
+        checkbox.setAttribute('aria-label', 'Chọn ' + item.name);
+
+        const thumb = document.createElement('div');
+        thumb.className = 'auto-mask-thumb';
+        const image = document.createElement('img');
+        image.alt = 'Xem trước ' + item.name;
+        image.src = 'data:image/png;base64,' + item.thumbnail_base64;
+        thumb.appendChild(image);
+
+        const copy = document.createElement('div');
+        copy.className = 'auto-mask-copy';
+
+        const title = document.createElement('div');
+        title.className = 'auto-mask-title';
+        title.textContent = item.name;
+
+        const meta = document.createElement('div');
+        meta.className = 'auto-mask-meta';
+        meta.textContent = item.area_percent + '% ảnh · ' +
+            item.bbox.width + ' × ' + item.bbox.height + ' px';
+
+        const confidence = document.createElement('div');
+        confidence.className = 'auto-mask-meta auto-mask-confidence';
+        confidence.textContent = 'Điểm AI: ' + Math.round(item.score * 100) + '%';
+
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.maxLength = 80;
+        nameInput.className = 'auto-mask-name';
+        nameInput.value = item.layerName;
+        nameInput.setAttribute('aria-label', 'Tên layer ' + item.name);
+        nameInput.addEventListener('input', () => { item.layerName = nameInput.value; });
+
+        checkbox.addEventListener('change', refreshAutoSelection);
+        copy.append(title, meta, confidence, nameInput);
+        row.append(checkbox, thumb, copy);
+        autoSegObjectList.appendChild(row);
+    }
+    refreshAutoSelection();
+}
+
+async function setAutoBusy(busy) {
+    autoSegBusy = busy;
+    if (btnAnalyzeBanner) btnAnalyzeBanner.disabled = busy;
+    if (btnProcess) btnProcess.disabled = busy;
+    if (btnCheck) btnCheck.disabled = busy;
+    if (btnLoadSegImage) btnLoadSegImage.disabled = busy;
+    if (btnClearPoints) btnClearPoints.disabled = busy;
+    if (btnAddObject) btnAddObject.disabled = busy || !segmentationHasMask;
+    if (segPointMode) segPointMode.disabled = busy;
+    refreshAutoSelection();
+}
+
+if (btnAnalyzeBanner) {
+    btnAnalyzeBanner.addEventListener('click', async () => {
+        if (autoSegBusy || segmentationRequestInProgress) return;
+        if (!app.documents || app.documents.length === 0) {
+            setAutoSegHint('Hãy mở banner trong Photoshop trước khi phân tích.', 'error');
+            updateStatus('Chưa có ảnh đang mở', 'Mở poster trong Photoshop rồi bấm Phân tích toàn banner.', 0, 'warning');
+            return;
+        }
+
+        const sourceDoc = app.activeDocument;
+        let exportFile = null;
+        try {
+            await setAutoBusy(true);
+            updateStatus('Đang chuẩn bị toàn banner…', 'Xuất bản hợp nhất để AI phân tích tất cả thành phần đang nhìn thấy.', 7, 'warning');
+            setAutoSegHint('Đang chuẩn bị ảnh. Với banner lớn, bước này có thể mất thời gian…');
+
+            const tempFolder = await fs.getTemporaryFolder();
+            exportFile = await tempFolder.createFile('ai_auto_banner_' + Date.now() + '.png', { overwrite: true });
+            await exportCompositeToPng(sourceDoc, exportFile);
+            const imageBase64 = await fileToBase64(exportFile);
+
+            if (autoSegImageId) {
+                try { await postSegmentation('/segment_auto_close', { image_id: autoSegImageId }, 5000); } catch (_) {}
+            }
+            updateStatus('AI đang dò các phần trong banner…', 'Tìm vùng lớn và chi tiết. Mức Chi tiết sẽ chậm hơn, nhất là khi chạy CPU.', 22, 'warning');
+            setAutoSegHint('SAM đang tìm các vùng ứng viên trên toàn ảnh…');
+
+            const data = await postSegmentation('/segment_auto', {
+                image_base64: imageBase64,
+                quality: bannerSegQuality ? bannerSegQuality.value : 'balanced'
+            }, 900000);
+
+            autoSegImageId = data.image_id;
+            autoSegDocumentId = sourceDoc.id;
+            autoSegTargetDoc = sourceDoc;
+            autoSegOriginalLayers = Array.from(sourceDoc.layers);
+            renderAutoObjectList(data.objects);
+
+            const deviceLabel = data.device === 'cuda' ? 'GPU' : 'CPU';
+            const elapsed = Number(data.elapsed_seconds || 0).toFixed(1);
+            setAutoSegHint(
+                'Đã tìm ' + data.count + ' vùng trong ' + elapsed + ' giây trên ' + deviceLabel +
+                '. Vùng lớn/nhỏ có thể chồng lấn nhau: xem thumbnail, bỏ chọn vùng trùng hoặc không cần, rồi nhập các vùng còn lại.',
+                'success'
+            );
+            updateStatus('Đã phân tích banner', data.count + ' vùng ứng viên · ' + elapsed + ' giây · ' + deviceLabel, 100, 'success');
+        } catch (error) {
+            console.error('[Auto banner segmentation]', error);
+            setAutoSegHint(error.message || String(error), 'error');
+            updateStatus('Không phân tích được banner', error.message || String(error), 0, 'error');
+        } finally {
+            if (exportFile) {
+                try { await exportFile.delete(); } catch (_) {}
+            }
+            await setAutoBusy(false);
+        }
+    });
+}
+
+if (btnSelectAllMasks) {
+    btnSelectAllMasks.addEventListener('click', () => {
+        if (autoSegBusy) return;
+        autoSegObjectList.querySelectorAll('.auto-mask-checkbox').forEach(input => { input.checked = true; });
+        refreshAutoSelection();
+    });
+}
+
+if (btnSelectNoMasks) {
+    btnSelectNoMasks.addEventListener('click', () => {
+        if (autoSegBusy) return;
+        autoSegObjectList.querySelectorAll('.auto-mask-checkbox').forEach(input => { input.checked = false; });
+        refreshAutoSelection();
+    });
+}
+
+if (btnImportMasks) {
+    btnImportMasks.addEventListener('click', async () => {
+        if (autoSegBusy || segmentationRequestInProgress || !autoSegImageId) return;
+        const selected = selectedAutoObjects();
+        if (!selected.length) {
+            setAutoSegHint('Hãy chọn ít nhất một vùng trước khi nhập layer.', 'error');
+            return;
+        }
+        if (!autoSegTargetDoc || !Array.from(app.documents).some(doc => doc.id === autoSegDocumentId)) {
+            setAutoSegHint('Tài liệu Photoshop ban đầu đã đóng. Hãy phân tích lại ảnh đang mở.', 'error');
+            return;
+        }
+
+        let importedCount = 0;
+        const total = selected.length;
+        try {
+            await setAutoBusy(true);
+            for (let index = 0; index < selected.length; index += 1) {
+                if (!Array.from(app.documents).some(doc => doc.id === autoSegDocumentId)) {
+                    throw new Error('Tài liệu ban đầu đã đóng; dừng nhập để không nhầm sang file khác.');
+                }
+                const item = selected[index];
+                updateStatus(
+                    'Đang tạo layer ' + (index + 1) + '/' + total + '…',
+                    item.layerName || item.name,
+                    15 + Math.round((index / total) * 80),
+                    'warning'
+                );
+
+                const response = await postSegmentation('/segment_auto_export', {
+                    image_id: autoSegImageId,
+                    object_id: item.id
+                }, 600000);
+
+                const tempFolder = await fs.getTemporaryFolder();
+                const tempFile = await tempFolder.createFile(
+                    'ai_banner_part_' + item.id + '_' + Date.now() + '.png',
+                    { overwrite: true }
+                );
+                try {
+                    await base64ToFile(response.foreground_base64, tempFile);
+                    await core.executeAsModal(async () => {
+                        await importPngAsLayer(tempFile, autoSegTargetDoc, (item.layerName || item.name).trim().slice(0, 80));
+                    }, { commandName: 'AI Layer Splitter - Import Banner Part' });
+                    importedCount += 1;
+                } finally {
+                    try { await tempFile.delete(); } catch (_) {}
+                }
+            }
+
+            if (chkAutoHideOriginal && chkAutoHideOriginal.checked) {
+                // Hide exactly the layers that existed before object layers were imported.
+                for (const layer of autoSegOriginalLayers) {
+                    try { layer.visible = false; } catch (_) {}
+                }
+            }
+
+            setAutoSegHint(
+                'Đã thêm ' + importedCount + ' layer riêng. Lưu ý: các vùng có thể chồng lấn và ảnh nền gốc vẫn chứa hình cũ; nếu di chuyển vật thể, có thể cần xóa/retouch nền phía sau.',
+                'success'
+            );
+            updateStatus('Đã tách các phần thành layer', importedCount + ' layer đã được thêm vào tài liệu Photoshop.', 100, 'success');
+        } catch (error) {
+            console.error('[Auto banner layer import]', error);
+            setAutoSegHint(
+                'Đã nhập ' + importedCount + '/' + total + ' layer trước khi gặp lỗi: ' + (error.message || String(error)),
+                'error'
+            );
+            updateStatus('Quá trình nhập chưa hoàn tất', importedCount + '/' + total + ' layer đã được thêm. ' + (error.message || String(error)), 0, 'error');
+        } finally {
+            await setAutoBusy(false);
+        }
+    });
+}
+
 btnCheck.addEventListener('click', async () => {
     if (btnCheck.disabled) return;
     btnCheck.disabled = true;

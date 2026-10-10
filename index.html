@@ -13,7 +13,7 @@
     <header class="header">
       <div class="brand-mark" aria-hidden="true">AI</div>
       <div class="heading-copy">
-        <div class="eyebrow">PHOTOSHOP WORKFLOW <span class="version-pill">v2.2</span></div>
+        <div class="eyebrow">PHOTOSHOP WORKFLOW <span class="version-pill">v2.3</span></div>
         <h1>AI Layer Splitter</h1>
         <p class="subtitle">Tách chủ thể và tạo nền riêng bằng AI cục bộ.</p>
       </div>
@@ -117,12 +117,45 @@
       <p id="detailText" class="detail-text">Mở tài liệu trong Photoshop, chọn tác vụ và bắt đầu. Ảnh gốc không bị xóa.</p>
     </section>
 
-    <!-- 03. Tùy chọn nâng cao: Tách từng vật thể chi tiết (SAM AI) -->
-    <section class="panel segmentation-panel" aria-labelledby="segHeading">
+    <!-- 03. Automatic poster/banner decomposition -->
+    <section class="panel auto-decompose-panel" aria-labelledby="autoSegHeading">
       <div class="section-heading">
         <span class="step-number">03</span>
         <div>
-          <h2 id="segHeading">Tách từng vật thể chi tiết (SAM)</h2>
+          <h2 id="autoSegHeading">Tách banner thành nhiều layer</h2>
+          <p>AI dò nhiều vùng trên toàn banner; bạn xem trước, bỏ vùng sai và nhập các phần đã chọn.</p>
+        </div>
+      </div>
+      <div class="auto-seg-body">
+        <label for="bannerSegQuality" class="field-label">Mức độ chi tiết</label>
+        <select id="bannerSegQuality" class="model-select auto-quality">
+          <option value="coarse">Cơ bản · ít layer, xử lý nhanh hơn</option>
+          <option value="balanced" selected>Cân bằng · phù hợp banner</option>
+          <option value="detail">Chi tiết · tìm nhiều vùng nhỏ hơn, chậm hơn</option>
+        </select>
+        <button id="btnAnalyzeBanner" class="btn-primary auto-analyze" type="button">✦ Phân tích toàn banner</button>
+        <p class="auto-seg-help">Khi phân tích xong, xem thumbnail từng vùng. Bỏ chọn vùng nền lớn hoặc vùng AI nhận nhầm. Chế độ này tìm vùng tự động, không tự hiểu ngữ nghĩa từng chữ/họa tiết.</p>
+        <label class="auto-hide-original-row" for="chkAutoHideOriginal">
+          <input type="checkbox" id="chkAutoHideOriginal">
+          <span>Ẩn layer gốc sau khi tách (chỉ hiện các phần đã tách trên nền trong suốt)</span>
+        </label>
+        <div id="autoSegSummary" class="auto-seg-summary" hidden></div>
+        <div class="auto-seg-selection">
+          <button id="btnSelectAllMasks" class="btn-secondary" type="button" disabled>Chọn tất cả</button>
+          <button id="btnSelectNoMasks" class="btn-secondary" type="button" disabled>Bỏ chọn</button>
+        </div>
+        <div id="autoSegObjectList" class="auto-seg-object-list" role="list" aria-label="Các vùng AI phát hiện"></div>
+        <button id="btnImportMasks" class="btn-primary auto-import" type="button" disabled>Thêm các phần đã chọn thành layer</button>
+        <p id="autoSegHint" class="seg-hint">Mở tài liệu Photoshop rồi bấm “Phân tích toàn banner”. Model SAM cần được cài bằng cai_dat_sam.bat.</p>
+      </div>
+    </section>
+
+    <!-- 04. Fine-control: click and refine one object -->
+    <section class="panel segmentation-panel" aria-labelledby="segHeading">
+      <div class="section-heading">
+        <span class="step-number">04</span>
+        <div>
+          <h2 id="segHeading">Tinh chỉnh một vật thể bằng điểm chọn</h2>
           <p>Chấm điểm lên vật thể để tách lẻ từng chi tiết riêng biệt.</p>
         </div>
       </div>

@@ -33,9 +33,11 @@ jobs:
           import json
           from pathlib import Path
           manifest = json.loads(Path("manifest.json").read_text(encoding="utf-8"))
-          assert manifest["version"] == "2.2.0", manifest.get("version")
+          assert manifest["version"] == "2.3.0", manifest.get("version")
           html = Path("index.html").read_text(encoding="utf-8")
           required = [
+              "btnAnalyzeBanner", "bannerSegQuality", "btnSelectAllMasks",
+              "btnSelectNoMasks", "btnImportMasks", "autoSegObjectList",
               "btnLoadSegImage", "segPointMode", "segPreviewImage",
               "segOverlayCanvas", "btnClearPoints", "btnAddObject",
               "btnProcess", "btnCheck", "statusText", "detailText",
@@ -43,7 +45,7 @@ jobs:
           missing = [item for item in required if f'id="{item}"' not in html]
           assert not missing, f"Missing UI elements: {missing}"
           server = Path("server.py").read_text(encoding="utf-8")
-          for route in ("/sam_health", "/segment_init", "/segment_point", "/segment_export", "/segment_close"):
+          for route in ("/sam_health", "/segment_init", "/segment_point", "/segment_export", "/segment_close", "/segment_auto", "/segment_auto_export", "/segment_auto_close"):
               assert f'"{route}"' in server, f"Missing route {route}"
           print("Manifest, segmentation UI and API contract checks passed.")
           PY

@@ -84,3 +84,24 @@ Chế độ tách nền bằng rembg vẫn hoạt động như trước. Với p
 **Cơ chế:** SAM tạo mặt nạ từ điểm người dùng chọn, và plugin xuất vùng đã chọn thành PNG trong suốt với cùng kích thước canvas, rồi nhập vào Photoshop thành layer độc lập. Cách chọn có hướng dẫn này hữu ích hơn việc đoán tất cả đối tượng trong poster tự động; các vùng chồng lấn hoặc chi tiết rất nhỏ có thể vẫn cần thêm điểm +/− để tinh chỉnh.
 
 **Khắc phục:** nếu thấy thông báo chưa cài model, chạy lại \`cai_dat_sam.bat\`, xác nhận có \`models/sam_vit_b_01ec64.pth\`, rồi khởi động lại server. Lần nạp model đầu tiên có thể chậm, đặc biệt khi chạy CPU.
+
+
+---
+
+## Tách banner thành nhiều layer (v2.3)
+
+Với poster/banner có chữ nghệ thuật, mây, hoa lá, biểu tượng và họa tiết, panel có thêm chế độ **Phân tích toàn banner**. Chế độ này sử dụng SAM Automatic Mask Generator để tìm nhiều vùng ứng viên trên ảnh:
+
+1. Cài SAM một lần bằng file cai_dat_sam.bat, khởi động lại run_ai_server.bat.
+2. Trong Photoshop, mở banner và chọn **Tách banner thành nhiều layer**.
+3. Chọn mức **Cơ bản / Cân bằng / Chi tiết**, rồi bấm **Phân tích toàn banner**.
+4. Xem thumbnail vùng AI tìm được. Bỏ chọn vùng nền lớn, vùng trùng hoặc vùng không cần; sửa tên layer cho dễ quản lý.
+5. Bấm **Thêm các phần đã chọn thành layer**. Các vùng được xuất thành PNG RGBA cùng kích thước canvas và nhập lần lượt thành layer riêng.
+6. Dùng chế độ **Tinh chỉnh một vật thể bằng điểm chọn** khi muốn chọn lại chính xác một vùng bằng điểm + và −.
+
+### Hiểu đúng kết quả
+
+- SAM tự động tạo **các vùng ứng viên**, không phải hệ thống hiểu ngữ nghĩa hoàn hảo. Một chữ có thể bị chia nhỏ, một cụm họa tiết có thể có nhiều mặt nạ chồng lấn; hãy xem thumbnail và bỏ chọn vùng thừa.
+- Các layer mới là phần pixel đã tách, có nền trong suốt và giữ nguyên tọa độ canvas. Để tránh làm hỏng thiết kế, mặc định layer gốc vẫn được giữ nguyên và hiển thị.
+- Nếu bật **Ẩn layer gốc sau khi tách**, chỉ các phần được tách còn hiện trên nền trong suốt. Công cụ chưa tự phục dựng nền phức tạp phía sau các vật thể; khi di chuyển phần tử trên banner, bạn có thể cần xóa/retouch vùng cũ hoặc tự dựng layer nền riêng.
+- Mức Chi tiết có thể chậm trên CPU và cần nhiều RAM. Nên thử với bản sao của tài liệu, đặc biệt khi xử lý file khổ lớn.
