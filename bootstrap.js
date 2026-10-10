@@ -1,22 +1,22 @@
 (function () {
   "use strict";
-  var isPhotoshopUXP = false;
-  try {
-    if (typeof require === "function") {
-      var photoshopModule = require("photoshop");
-      var uxpModule = require("uxp");
-      isPhotoshopUXP = !!(photoshopModule && photoshopModule.app && photoshopModule.core &&
-        uxpModule && uxpModule.storage && uxpModule.storage.localFileSystem);
+  if (typeof require === "function") {
+    try {
+      require("./index.js");
+      return;
+    } catch (err) {
+      console.error("[AI Layer Splitter] Error loading index.js via require:", err);
     }
-  } catch (_) { isPhotoshopUXP = false; }
+  }
 
+  // Browser fallback for preview
   var entry = document.createElement("script");
-  entry.src = isPhotoshopUXP ? "index.js" : "preview.js";
+  entry.src = "preview.js";
   entry.onerror = function () {
     var title = document.getElementById("statusText");
     var detail = document.getElementById("detailText");
     if (title) title.textContent = "Không tải được giao diện";
-    if (detail) detail.textContent = "Hãy tải lại trang hoặc kiểm tra các file bootstrap.js, index.js và preview.js.";
+    if (detail) detail.textContent = "Hãy tải lại trang hoặc kiểm tra các file script.";
   };
   document.body.appendChild(entry);
 }());
