@@ -18,3 +18,8 @@ temp_*.jpg
 Thumbs.db
 .vscode/
 .idea/
+
+# Large models & weights
+models/
+*.pth
+*.onnx

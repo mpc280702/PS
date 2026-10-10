@@ -1,5 +1,38 @@
 (function () {
   "use strict";
+
+  // Tab switching initialization (works in both UXP and browser)
+  function initTabs() {
+    var tabs = document.querySelectorAll(".tab-btn");
+    if (!tabs || tabs.length === 0) return;
+    tabs.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var targetId = btn.getAttribute("data-tab");
+        tabs.forEach(function (b) {
+          b.classList.remove("active");
+          b.setAttribute("aria-selected", "false");
+        });
+        document.querySelectorAll(".tab-pane").forEach(function (pane) {
+          pane.classList.remove("active");
+          pane.hidden = true;
+        });
+        btn.classList.add("active");
+        btn.setAttribute("aria-selected", "true");
+        var targetPane = document.getElementById(targetId);
+        if (targetPane) {
+          targetPane.classList.add("active");
+          targetPane.hidden = false;
+        }
+      });
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initTabs);
+  } else {
+    initTabs();
+  }
+
   if (typeof require === "function") {
     try {
       require("./index.js");

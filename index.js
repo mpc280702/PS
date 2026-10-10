@@ -539,7 +539,7 @@ function renderAutoObjectList(objects) {
 
     for (const item of autoSegObjects) {
         const row = document.createElement('div');
-        row.className = 'auto-mask-card';
+        row.className = 'auto-mask-card is-checked';
         row.setAttribute('role', 'listitem');
 
         const checkbox = document.createElement('input');
@@ -580,12 +580,21 @@ function renderAutoObjectList(objects) {
         nameInput.setAttribute('aria-label', 'Tên layer ' + item.name);
         nameInput.addEventListener('input', () => { item.layerName = nameInput.value; });
 
-        checkbox.addEventListener('change', refreshAutoSelection);
+        checkbox.addEventListener('change', () => {
+            row.classList.toggle('is-checked', checkbox.checked);
+            refreshAutoSelection();
+        });
         copy.append(title, meta, confidence, nameInput);
         row.append(checkbox, thumb, copy);
         autoSegObjectList.appendChild(row);
     }
     refreshAutoSelection();
+
+    // Auto-switch to banner tab so user sees the 40 detected regions immediately
+    const tabBannerBtn = document.getElementById('tabBtnBanner');
+    if (tabBannerBtn && !tabBannerBtn.classList.contains('active')) {
+        tabBannerBtn.click();
+    }
 }
 
 async function setAutoBusy(busy) {
@@ -662,7 +671,13 @@ if (btnAnalyzeBanner) {
 if (btnSelectAllMasks) {
     btnSelectAllMasks.addEventListener('click', () => {
         if (autoSegBusy) return;
-        autoSegObjectList.querySelectorAll('.auto-mask-checkbox').forEach(input => { input.checked = true; });
+        autoSegObjectList.querySelectorAll('.auto-mask-card').forEach(card => {
+            const input = card.querySelector('.auto-mask-checkbox');
+            if (input) {
+                input.checked = true;
+                card.classList.add('is-checked');
+            }
+        });
         refreshAutoSelection();
     });
 }
@@ -670,7 +685,13 @@ if (btnSelectAllMasks) {
 if (btnSelectNoMasks) {
     btnSelectNoMasks.addEventListener('click', () => {
         if (autoSegBusy) return;
-        autoSegObjectList.querySelectorAll('.auto-mask-checkbox').forEach(input => { input.checked = false; });
+        autoSegObjectList.querySelectorAll('.auto-mask-card').forEach(card => {
+            const input = card.querySelector('.auto-mask-checkbox');
+            if (input) {
+                input.checked = false;
+                card.classList.remove('is-checked');
+            }
+        });
         refreshAutoSelection();
     });
 }
