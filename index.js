@@ -281,7 +281,7 @@ async function postSegmentation(path, body, timeoutMs = 600000) {
 
 if (btnLoadSegImage) {
     btnLoadSegImage.addEventListener('click', async () => {
-        if (segmentationRequestInProgress) return;
+        if (segmentationRequestInProgress || btnProcess.disabled) return;
         if (!app.documents || app.documents.length === 0) {
             setSegHint('Hãy mở một ảnh trong Photoshop trước.', 'error');
             updateStatus('Chưa có ảnh đang mở', 'Mở tài liệu Photoshop rồi nạp ảnh vào vùng chọn vật thể.', 0, 'warning');
@@ -289,6 +289,8 @@ if (btnLoadSegImage) {
         }
 
         segmentationRequestInProgress = true;
+        btnProcess.disabled = true;
+        btnCheck.disabled = true;
         btnLoadSegImage.disabled = true;
         btnClearPoints.disabled = true;
         btnAddObject.disabled = true;
@@ -342,13 +344,15 @@ if (btnLoadSegImage) {
             }
             segmentationRequestInProgress = false;
             btnLoadSegImage.disabled = false;
+            btnProcess.disabled = false;
+            btnCheck.disabled = false;
         }
     });
 }
 
 if (segPreviewImage) {
     segPreviewImage.addEventListener('click', async (event) => {
-        if (!segmentationImageId || segmentationRequestInProgress) return;
+        if (!segmentationImageId || segmentationRequestInProgress || btnProcess.disabled) return;
         if (!app.documents || app.documents.length === 0 || segmentationDocumentId !== app.activeDocument.id) {
             setSegHint('Tài liệu đang hoạt động đã thay đổi hoặc đã đóng. Hãy nạp lại ảnh để tránh thêm layer nhầm tài liệu.', 'error');
             return;
@@ -372,6 +376,8 @@ if (segPreviewImage) {
         segmentationPoints.push({ x: x, y: y, label: label });
         updateSegPointLabel();
         segmentationRequestInProgress = true;
+        btnProcess.disabled = true;
+        btnCheck.disabled = true;
         btnLoadSegImage.disabled = true;
         btnClearPoints.disabled = true;
         btnAddObject.disabled = true;
@@ -399,6 +405,8 @@ if (segPreviewImage) {
             segmentationRequestInProgress = false;
             btnLoadSegImage.disabled = false;
             btnClearPoints.disabled = false;
+            btnProcess.disabled = false;
+            btnCheck.disabled = false;
         }
     });
 }
@@ -416,13 +424,15 @@ if (btnClearPoints) {
 
 if (btnAddObject) {
     btnAddObject.addEventListener('click', async () => {
-        if (!segmentationImageId || !segmentationHasMask || segmentationRequestInProgress) return;
+        if (!segmentationImageId || !segmentationHasMask || segmentationRequestInProgress || btnProcess.disabled) return;
         if (!app.documents || app.documents.length === 0 || segmentationDocumentId !== app.activeDocument.id) {
             setSegHint('Tài liệu đang hoạt động đã thay đổi. Hãy nạp lại ảnh trước khi thêm layer.', 'error');
             return;
         }
 
         segmentationRequestInProgress = true;
+        btnProcess.disabled = true;
+        btnCheck.disabled = true;
         btnAddObject.disabled = true;
         btnLoadSegImage.disabled = true;
         btnClearPoints.disabled = true;
@@ -461,6 +471,8 @@ if (btnAddObject) {
             btnLoadSegImage.disabled = false;
             btnClearPoints.disabled = false;
             btnAddObject.disabled = !segmentationHasMask;
+            btnProcess.disabled = false;
+            btnCheck.disabled = false;
         }
     });
 }
@@ -478,7 +490,7 @@ btnCheck.addEventListener('click', async () => {
 });
 
 btnProcess.addEventListener('click', async () => {
-    if (btnProcess.disabled) return;
+    if (btnProcess.disabled || segmentationRequestInProgress) return;
     if (!app.documents || app.documents.length === 0) {
         updateStatus('Chưa có ảnh đang mở', 'Hãy mở một tài liệu trong Photoshop trước khi chạy.', 0, 'warning');
         return;
