@@ -81,7 +81,8 @@ AVAILABLE_MODELS = ["isnet-general-use", "u2net", "u2netp"]
 SESSIONS: dict[str, Any] = {}
 
 
-def get_session(model_name: str) -> Any:
+def get_session(model_name: str) -> tuple[Any, str]:
+    """Return both the loaded session and the model actually in use."""
     if model_name not in AVAILABLE_MODELS:
         model_name = "isnet-general-use"
     with inference_lock:
@@ -94,20 +95,18 @@ def get_session(model_name: str) -> Any:
                 log_debug(f"Failed to load '{model_name}': {err}; falling back to u2netp.")
                 if "u2netp" not in SESSIONS:
                     SESSIONS["u2netp"] = new_session("u2netp")
-                return SESSIONS["u2netp"]
-        return SESSIONS[model_name]
+                return SESSIONS["u2netp"], "u2netp"
+        return SESSIONS[model_name], model_name
 
 
 log_debug("=== AI Layer Splitter v2 server starting ===")
 # Pre-warm default high-detail model
 try:
-    current_model_name = "isnet-general-use"
-    session = get_session("isnet-general-use")
-    log_debug("Primary model isnet-general-use pre-warmed successfully.")
+    session, current_model_name = get_session("isnet-general-use")
+    log_debug(f"Primary model pre-warmed successfully: {current_model_name}.")
 except Exception as init_err:
     log_debug(f"Pre-warm failed: {init_err}")
-    current_model_name = "u2netp"
-    session = get_session("u2netp")
+    session, current_model_name = get_session("u2netp")
 
 
 def decode_image_request() -> Image.Image:
@@ -344,10 +343,10 @@ def process_image():
             return jsonify({"status": "error", "error": "Hãy chọn ít nhất một tác vụ xử lý."}), 400
 
         target_model = chosen_model if chosen_model in AVAILABLE_MODELS else "isnet-general-use"
-        active_session = get_session(target_model)
+        active_session, actual_model_name = get_session(target_model)
 
         log_debug(
-            f"Processing image {width}x{height} using {target_model}; "
+            f"Processing image {width}x{height} using {actual_model_name}; "
             f"foreground={extract_subject}; inpaint={do_inpaint}; fill_holes={fill_holes}; "
             f"refine_edges={refine_edges}"
         )
@@ -386,7 +385,7 @@ def process_image():
             "status": "success",
             "width": width,
             "height": height,
-            "model": target_model,
+            "model": actual_model_name,
             "elapsed_seconds": round(time.time() - started_at, 2),
         }
 
