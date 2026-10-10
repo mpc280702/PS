@@ -823,8 +823,47 @@ if (btnImportMasks) {
 
         let importedCount = 0;
         const total = selected.length;
+        const hideSourceAfterImport = !!(chkAutoHideOriginal && chkAutoHideOriginal.checked);
         try {
             await setAutoBusy(true);
+
+            // If the user wants to hide the source artwork, import the complement
+            // mask first. It keeps every source pixel not covered by the selected
+            // object masks, so the layer stack remains a complete banner instead
+            // of showing checkerboard holes between detected objects.
+            if (hideSourceAfterImport) {
+                updateStatus(
+                    'Đang tạo layer phần nền còn lại…',
+                    'Giữ lại toàn bộ pixel chưa nằm trong các vùng đã chọn để banner không bị thủng.',
+                    12,
+                    'warning'
+                );
+                const remainder = await postSegmentation('/segment_auto_export', {
+                    image_id: autoSegImageId,
+                    object_id: '__remainder__',
+                    object_ids: selected.map(item => item.id)
+                }, 600000);
+                const tempFolder = await fs.getTemporaryFolder();
+                const remainderFile = await tempFolder.createFile(
+                    'ai_banner_remainder_' + Date.now() + '.png',
+                    { overwrite: true }
+                );
+                try {
+                    await base64ToFile(remainder.foreground_base64, remainderFile);
+                    await core.executeAsModal(async () => {
+                        await importPngAsLayer(
+                            remainderFile,
+                            autoSegTargetDoc,
+                            'AI - Nền còn lại (giữ banner liền mạch)',
+                            { x: remainder.crop_x, y: remainder.crop_y }
+                        );
+                    }, { commandName: 'AI Layer Splitter - Import Remaining Artwork' });
+                    importedCount += 1;
+                } finally {
+                    try { await remainderFile.delete(); } catch (_) {}
+                }
+            }
+
             for (let index = 0; index < selected.length; index += 1) {
                 if (!Array.from(app.documents).some(doc => doc.id === autoSegDocumentId)) {
                     throw new Error('Tài liệu ban đầu đã đóng; dừng nhập để không nhầm sang file khác.');
@@ -861,15 +900,17 @@ if (btnImportMasks) {
                 }
             }
 
-            if (chkAutoHideOriginal && chkAutoHideOriginal.checked) {
-                // Hide exactly the layers that existed before object layers were imported.
+            if (hideSourceAfterImport) {
+                // Hide exactly the layers that existed before the new layer package was imported.
                 for (const layer of autoSegOriginalLayers) {
                     try { layer.visible = false; } catch (_) {}
                 }
             }
 
             setAutoSegHint(
-                'Đã thêm ' + importedCount + ' layer riêng. Lưu ý: các vùng có thể chồng lấn và ảnh nền gốc vẫn chứa hình cũ; nếu di chuyển vật thể, có thể cần xóa/retouch nền phía sau.',
+                hideSourceAfterImport
+                    ? 'Đã thêm ' + importedCount + ' layer, gồm layer “Nền còn lại” để giữ banner liền mạch khi ẩn ảnh gốc. Các chi tiết vẫn có thể chồng lấn; nếu di chuyển vật thể, phần nền phía sau chưa được phục dựng bằng Generative Fill.'
+                    : 'Đã thêm ' + importedCount + ' layer riêng. Ảnh gốc vẫn được giữ lại để bảo đảm banner không bị thủng. Khi di chuyển vật thể, cần tự phục dựng vùng nền cũ nếu muốn xóa dấu vết.',
                 'success'
             );
             updateStatus('Đã tách các phần thành layer', importedCount + ' layer đã được thêm vào tài liệu Photoshop.', 100, 'success');
