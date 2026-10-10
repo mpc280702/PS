@@ -596,3 +596,7 @@ button:disabled {
   .auto-seg-body { padding-right: 8px; padding-left: 8px; }
   .auto-mask-thumb { flex-basis: 46px; width: 46px; height: 46px; }
 }
+
+.auto-hide-original-row { display: flex; align-items: flex-start; gap: 7px; margin: 5px 1px 8px; color: var(--muted); font-size: 9px; line-height: 1.4; cursor: pointer; }
+.auto-hide-original-row input { flex: 0 0 13px; width: 13px; height: 13px; margin: 1px 0 0; accent-color: var(--accent); }
+.auto-mask-name { width: 100%; min-width: 0; padding: 4px 5px; border: 1px solid #35445b; border-radius: 5px; color: #dce7f9; background: #111722; font-size: 9px; }
