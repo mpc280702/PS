@@ -1140,9 +1140,10 @@ btnProcess.addEventListener('click', async () => {
             }
         }, { commandName: 'AI Layer Splitter - Import Layers' });
 
+        const maskStatus = extractSubject && createSubjectLayerMask ? ' kèm Layer Mask chỉnh sửa được' : '';
         updateStatus('Tách layer thành công', inpaintBackground
-            ? `Đã thêm ${extractSubject ? 'layer chủ thể và layer nền' : 'layer nền'}; layer gốc được giữ lại nhưng đang ẩn.`
-            : 'Đã thêm layer chủ thể. Layer gốc vẫn hiển thị để bạn đối chiếu và có thể tự ẩn khi cần.', 100, 'success');
+            ? `Đã thêm ${extractSubject ? 'layer chủ thể' + maskStatus + ' và layer nền' : 'layer nền'}; layer gốc được giữ lại nhưng đang ẩn.`
+            : `Đã thêm layer chủ thể${maskStatus}. Layer gốc vẫn hiển thị để bạn đối chiếu và có thể tự ẩn khi cần.`, 100, 'success');
     } catch (error) {
         console.error('[AI Layer Splitter]', error);
         updateStatus('Xử lý chưa hoàn tất', error && error.message ? error.message : String(error), 0, 'error');
