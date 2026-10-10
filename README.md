@@ -130,3 +130,14 @@ Lưu ý:
 - SAM là mô hình phân đoạn theo hình ảnh, không phải mô hình hiểu cấu trúc thiết kế/kiểu chữ hoàn hảo. Một chữ nghệ thuật có thể tách thành nhiều mặt nạ hoặc một cụm nhiều ký tự có thể thành một vùng.
 - Các mặt nạ vẫn có thể chồng lấn. Giữ layer gốc hiển thị trong lúc kiểm tra; chỉ ẩn layer gốc khi đã chắc chắn các vùng quan trọng đều được giữ.
 - Công cụ không tự tái tạo pixel nền bị che sau khi di chuyển phần tử. Muốn banner tái cấu trúc hoàn chỉnh, bước dựng nền và kiểm soát thứ tự lớp vẫn có thể cần thao tác thủ công.
+
+ 
+---
+ 
+## Fix Scratch Disk Full / import performance — v2.5
+ 
+The object export endpoints now return a tightly cropped PNG plus its original canvas offset (crop_x, crop_y), rather than encoding a full-canvas transparent PNG for every small object. The UXP plugin imports each cropped layer and translates it back to the original position. Standard full-canvas foreground/background imports are unchanged.
+ 
+This reduces PNG transfer size, temporary document pixel dimensions, and avoidable scratch-disk usage when importing many banner objects. It cannot replace free scratch-disk space when Photoshop itself reports the disk is full.
+ 
+If Photoshop still shows Scratch Disks Are Full, follow Adobe's steps: close Photoshop after saving work, free space on the configured scratch disk (Adobe recommends at least 100 GB free on the primary scratch disk for demanding work), then set another available drive via Edit > Preferences > Scratch Disks. If Photoshop cannot launch, hold Ctrl+Alt while launching to choose a scratch disk. Source: Adobe Help — Troubleshoot scratch disk full errors.

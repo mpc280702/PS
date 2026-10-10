@@ -483,16 +483,33 @@ def segment_export():
         if SAM_STATE["mask"] is None:
             return jsonify({"status": "error", "error": "Chưa có vùng chọn. Hãy bấm vào một vật thể trước."}), 400
         original = SAM_STATE["image"].convert("RGBA")
-        mask = SAM_STATE["mask"].copy()
-        original_alpha = np.asarray(original.getchannel("A"), dtype=np.uint8)
-        alpha = np.minimum(original_alpha, mask.astype(np.uint8) * 255)
-        original.putalpha(Image.fromarray(alpha, mode="L"))
+        mask = SAM_STATE["mask"].astype(bool, copy=True)
+        ys, xs = np.where(mask)
+        if xs.size == 0 or ys.size == 0:
+            return jsonify({"status": "error", "error": "Vùng chọn rỗng. Hãy chọn lại vật thể."}), 422
+
+        # Export only the tight pixel bounds. Full-canvas transparent PNGs for
+        # every selected object create avoidable Photoshop scratch-disk usage.
+        crop_x, crop_y = int(xs.min()), int(ys.min())
+        crop_right, crop_bottom = int(xs.max()) + 1, int(ys.max()) + 1
+        crop_mask = mask[crop_y:crop_bottom, crop_x:crop_right]
+        crop_image = original.crop((crop_x, crop_y, crop_right, crop_bottom))
+        rgba = np.asarray(crop_image, dtype=np.uint8).copy()
+        original_alpha = rgba[:, :, 3].copy()
+        rgba[:, :, 3] = np.minimum(original_alpha, crop_mask.astype(np.uint8) * 255)
+        rgba[~crop_mask, :3] = 0
+        layer = Image.fromarray(rgba, mode="RGBA")
+        if original.info.get("dpi"):
+            layer.info["dpi"] = original.info["dpi"]
+
         return jsonify({
             "status": "success",
-            "width": original.width,
-            "height": original.height,
-            "foreground_base64": encode_png_base64(original),
-            "message": "Đã tạo PNG trong suốt cho vật thể được chọn.",
+            "width": layer.width,
+            "height": layer.height,
+            "crop_x": crop_x,
+            "crop_y": crop_y,
+            "foreground_base64": encode_png_base64(layer),
+            "message": "Đã xuất PNG trong suốt cắt sát vùng chọn để tiết kiệm scratch disk.",
         })
 
 
@@ -841,25 +858,41 @@ def segment_auto_export():
 
         original = AUTO_STATE["image"].convert("RGBA")
         work_mask = np.asarray(item["mask"], dtype=np.uint8)
+        # Upsample the mask to original resolution, then crop before converting
+        # the source to a full RGBA array. This avoids building another full-size
+        # 4-channel canvas per selected region on top of Photoshop's scratch data.
         full_mask = cv2.resize(
             work_mask,
             (original.width, original.height),
             interpolation=cv2.INTER_NEAREST,
         ).astype(bool)
-        rgba = np.asarray(original, dtype=np.uint8).copy()
+        ys, xs = np.where(full_mask)
+        if xs.size == 0 or ys.size == 0:
+            return jsonify({"status": "error", "error": "Mặt nạ vùng chọn rỗng. Hãy phân tích banner lại."}), 422
+
+        crop_x, crop_y = int(xs.min()), int(ys.min())
+        crop_right, crop_bottom = int(xs.max()) + 1, int(ys.max()) + 1
+        crop_mask = full_mask[crop_y:crop_bottom, crop_x:crop_right]
+        crop_image = original.crop((crop_x, crop_y, crop_right, crop_bottom))
+        rgba = np.asarray(crop_image, dtype=np.uint8).copy()
         original_alpha = rgba[:, :, 3].copy()
-        rgba[:, :, 3] = np.minimum(original_alpha, full_mask.astype(np.uint8) * 255)
-        rgba[~full_mask, :3] = 0
+        rgba[:, :, 3] = np.minimum(original_alpha, crop_mask.astype(np.uint8) * 255)
+        rgba[~crop_mask, :3] = 0
         layer = Image.fromarray(rgba, mode="RGBA")
         if original.info.get("dpi"):
             layer.info["dpi"] = original.info["dpi"]
+
         return jsonify({
             "status": "success",
             "object_id": object_id,
-            "width": original.width,
-            "height": original.height,
+            "width": layer.width,
+            "height": layer.height,
+            "crop_x": crop_x,
+            "crop_y": crop_y,
+            "canvas_width": original.width,
+            "canvas_height": original.height,
             "foreground_base64": encode_png_base64(layer),
-            "message": "Đã xuất layer trong suốt.",
+            "message": "Đã xuất PNG cắt sát vùng chọn để giảm bộ nhớ và scratch-disk sử dụng.",
         })
 
 
