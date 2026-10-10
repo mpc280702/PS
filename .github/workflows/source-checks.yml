@@ -33,10 +33,10 @@ jobs:
           import json
           from pathlib import Path
           manifest = json.loads(Path("manifest.json").read_text(encoding="utf-8"))
-          assert manifest["version"] == "2.3.0", manifest.get("version")
+          assert manifest["version"] == "2.4.0", manifest.get("version")
           html = Path("index.html").read_text(encoding="utf-8")
           required = [
-              "btnAnalyzeBanner", "bannerSegQuality", "btnSelectAllMasks",
+              "btnAnalyzeBanner", "bannerSegQuality", "btnSelectMainMasks", "btnSelectAllMasks",
               "btnSelectNoMasks", "btnImportMasks", "autoSegObjectList",
               "btnLoadSegImage", "segPointMode", "segPreviewImage",
               "segOverlayCanvas", "btnClearPoints", "btnAddObject",
@@ -47,5 +47,7 @@ jobs:
           server = Path("server.py").read_text(encoding="utf-8")
           for route in ("/sam_health", "/segment_init", "/segment_point", "/segment_export", "/segment_close", "/segment_auto", "/segment_auto_export", "/segment_auto_close"):
               assert f'"{route}"' in server, f"Missing route {route}"
-          print("Manifest, segmentation UI and API contract checks passed.")
+          assert "_diversify_banner_candidates" in server, "Missing size/spatial balancing"
+          assert 'crop_n_layers=config["crop_layers"]' in server, "Missing crop-based fine-detail scanning"
+          print("Manifest, banner UI, multi-scale segmentation and API contract checks passed.")
           PY
