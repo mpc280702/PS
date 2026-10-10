@@ -1075,6 +1075,9 @@ def segment_auto_export():
         if original.info.get("dpi"):
             layer.info["dpi"] = original.info["dpi"]
 
+        out_path = OUTPUT_DIR / f"{image_id}_{object_id}.png"
+        save_png_preserving_dpi(layer, out_path)
+
         return jsonify({
             "status": "success",
             "object_id": object_id,
@@ -1086,6 +1089,7 @@ def segment_auto_export():
             "canvas_width": original.width,
             "canvas_height": original.height,
             "foreground_base64": encode_png_base64(layer),
+            "filepath": str(out_path),
             "message": "Đã xuất PNG cắt sát vùng chọn để giảm bộ nhớ và scratch-disk sử dụng.",
         })
 

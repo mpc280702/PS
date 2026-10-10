@@ -22,6 +22,7 @@
         var batFile = new File(Folder.temp + "/ai_ill_call_" + stamp + ".bat");
         var resFile = new File(Folder.temp + "/ai_ill_res_" + stamp + ".json");
         var logFile = new File(Folder.temp + "/ai_ill_log_" + stamp + ".txt");
+        var doneFile = new File(Folder.temp + "/ai_ill_done_" + stamp + ".txt");
 
         batFile.open("w");
         batFile.encoding = "UTF-8";
@@ -29,24 +30,35 @@
         batFile.writeln('chcp 65001 > nul');
         var cmd = 'curl -s -m ' + (timeoutSec || 180) + ' ' + args + ' "' + url + '" > "' + resFile.fsName + '" 2> "' + logFile.fsName + '"';
         batFile.writeln(cmd);
+        batFile.writeln('echo DONE > "' + doneFile.fsName + '"');
         batFile.close();
 
         batFile.execute();
 
-        var maxWait = (timeoutSec || 180) * 10;
-        var waited = 0;
-        while (!resFile.exists && waited < maxWait) {
-            $.sleep(100);
-            waited++;
+        var maxWaitSec = (timeoutSec || 180) + 10;
+        var waitedSec = 0;
+        // Chỉ tiếp tục khi file doneFile xuất hiện (chứng tỏ curl đã chạy xong hoàn toàn)
+        while (!doneFile.exists && waitedSec < maxWaitSec) {
+            $.sleep(200);
+            waitedSec += 0.2;
         }
 
-        // Chờ file ghi xong
-        $.sleep(300);
+        // Chờ thêm một chút để file json được đóng hoàn toàn
+        $.sleep(250);
 
-        if (!resFile.exists || resFile.length === 0) {
+        if (!doneFile.exists || !resFile.exists || resFile.length === 0) {
+            var errMsg = "Không nhận được phản hồi từ AI Server.";
+            if (logFile.exists && logFile.length > 0) {
+                logFile.open("r");
+                var logContent = logFile.read();
+                logFile.close();
+                if (logContent && logContent.length > 0) errMsg += "\nChi tiết curl: " + logContent;
+            }
             try { batFile.remove(); } catch (_) {}
+            try { doneFile.remove(); } catch (_) {}
             try { logFile.remove(); } catch (_) {}
-            return null;
+            try { resFile.remove(); } catch (_) {}
+            return { status: "error", error: errMsg };
         }
 
         resFile.open("r");
@@ -56,12 +68,13 @@
 
         try { batFile.remove(); } catch (_) {}
         try { resFile.remove(); } catch (_) {}
+        try { doneFile.remove(); } catch (_) {}
         try { logFile.remove(); } catch (_) {}
 
         try {
             return eval("(" + content + ")");
         } catch (e) {
-            return null;
+            return { status: "error", error: "Không đọc được dữ liệu JSON trả về: " + e };
         }
     }
 
@@ -96,10 +109,10 @@
     taskPanel.alignChildren = ["left", "center"];
     taskPanel.spacing = 8;
 
-    var rbSubject = taskPanel.add("radiobutton", undefined, "Tách chủ thể chính (Người, sản phẩm, vật thể) - PNG trong suốt");
-    var rbInpaint = taskPanel.add("radiobutton", undefined, "Tách chủ thể + Tự bù nền phía sau (Inpainting - Giữ nền liền mạch)");
     var rbBanner = taskPanel.add("radiobutton", undefined, "Rã toàn bộ các thành phần trong Banner thành nhiều Layer (SAM AI)");
-    rbSubject.value = true;
+    var rbInpaint = taskPanel.add("radiobutton", undefined, "Tách chủ thể + Tự bù nền phía sau (Inpainting - Giữ nền liền mạch)");
+    var rbSubject = taskPanel.add("radiobutton", undefined, "Tách chủ thể chính (Người, sản phẩm, vật thể) - PNG trong suốt");
+    rbBanner.value = true;
 
     // Model & Settings Panel
     var settingsPanel = win.add("panel", undefined, "Cài đặt & Tùy chọn");
@@ -108,12 +121,11 @@
     settingsPanel.spacing = 8;
 
     var modelRow = settingsPanel.add("group");
-    modelRow.add("statictext", undefined, "Mô hình AI:");
+    modelRow.add("statictext", undefined, "Mức chi tiết / Model:");
     var modelDropdown = modelRow.add("dropdownlist", undefined, [
-        "isnet-general-use (Siêu nét, mặc định)",
-        "birefnet-general (Chất lượng cao, giữ chi tiết mảnh)",
-        "u2net (Đa dụng, ổn định)",
-        "silueta (Nhẹ, tốc độ nhanh)"
+        "Cân bằng · phù hợp banner (Khuyên dùng)",
+        "Chi tiết cao · tìm nhiều chi tiết nhỏ hơn",
+        "Cơ bản · ít layer, tốc độ nhanh hơn"
     ]);
     modelDropdown.selection = 0;
 
@@ -134,7 +146,6 @@
     };
 
     btnRun.onClick = function () {
-        // Kiểm tra kết nối AI Server trước
         if (!checkServer()) {
             alert(
                 "Không thể kết nối đến AI Server (http://127.0.0.1:5000)!\n\n" +
@@ -143,7 +154,6 @@
             );
             return;
         }
-
         win.close(1);
     };
 
@@ -153,13 +163,14 @@
     // -------------------------------------------------------------
     // Tiến hành xử lý trong Illustrator
     // -------------------------------------------------------------
-    var modelKeys = ["isnet-general-use", "birefnet-general", "u2net", "silueta"];
-    var selectedModel = modelKeys[modelDropdown.selection.index];
-    var isSubjectOnly = rbSubject.value;
-    var isInpaint = rbInpaint.value;
     var isDecomposeBanner = rbBanner.value;
+    var isInpaint = rbInpaint.value;
+    var isSubjectOnly = rbSubject.value;
 
-    // Lưu lại danh sách layer gốc
+    var qualityProfiles = ["balanced", "detail", "coarse"];
+    var chosenQuality = qualityProfiles[modelDropdown.selection.index];
+
+    // Lưu danh sách layer gốc
     var origLayers = [];
     for (var l = 0; l < doc.layers.length; l++) {
         origLayers.push(doc.layers[l]);
@@ -195,10 +206,94 @@
         return;
     }
 
-    // 2. Gọi AI Server tương ứng với tác vụ
-    if (isSubjectOnly || isInpaint) {
+    // 2. Xử lý theo từng tác vụ
+    if (isDecomposeBanner) {
+        // Tác vụ rã banner (SAM AI)
+        var autoArgs = '-X POST -F "file=@' + tempExportFile.fsName + '" -F "quality=' + chosenQuality + '"';
+        var autoResult = runCurl(SERVER_URL + "/segment_auto", autoArgs, 300);
+
+        try { tempExportFile.remove(); } catch (_) {}
+
+        if (!autoResult || autoResult.status !== "success" || !autoResult.objects) {
+            var errMsg = autoResult && autoResult.error ? autoResult.error : "Không nhận được phản hồi từ AI Server.";
+            alert("Lỗi khi phân tích banner bằng AI SAM: " + errMsg, "Thất bại");
+            return;
+        }
+
+        var imageId = autoResult.image_id;
+        var objects = autoResult.objects;
+        var totalFound = objects.length;
+
+        // Ưu tiên các vùng chính (default_selected !== false)
+        var importList = [];
+        for (var o = 0; o < objects.length; o++) {
+            if (objects[o].default_selected !== false) {
+                importList.push(objects[o]);
+            }
+        }
+        if (importList.length === 0) {
+            importList = objects.slice(0, 20);
+        }
+
+        var importedCount = 0;
+        for (var idx = 0; idx < importList.length; idx++) {
+            var item = importList[idx];
+            var exportArgs = '-H "Content-Type: application/json" -d "{\\"image_id\\":\\"' + imageId + '\\",\\"object_id\\":\\"' + item.id + '\\"}"';
+            var expRes = runCurl(SERVER_URL + "/segment_auto_export", exportArgs, 60);
+
+            if (expRes && expRes.status === "success") {
+                var objFile = null;
+                if (expRes.filepath) {
+                    var f = new File(expRes.filepath);
+                    if (f.exists) objFile = f;
+                }
+
+                if (objFile && objFile.exists && objFile.length > 0) {
+                    var objLayer = doc.layers.add();
+                    objLayer.name = "AI - " + (item.category || "Phần") + " · " + item.name;
+                    var objPlaced = objLayer.placedItems.add();
+                    objPlaced.file = objFile;
+
+                    // Tính tỷ lệ vị trí chính xác trên Artboard của Illustrator
+                    var scaleX = abWidth / expRes.canvas_width;
+                    var scaleY = abHeight / expRes.canvas_height;
+
+                    objPlaced.left = abLeft + (expRes.crop_x * scaleX);
+                    objPlaced.top = abTop - (expRes.crop_y * scaleY);
+                    objPlaced.width = expRes.width * scaleX;
+                    objPlaced.height = expRes.height * scaleY;
+
+                    if (chkEmbed.value) {
+                        try { objPlaced.embed(); } catch (_) {}
+                    }
+                    importedCount++;
+                }
+            }
+        }
+
+        // Đóng session
+        runCurl(SERVER_URL + "/segment_auto_close", '-H "Content-Type: application/json" -d "{\\"image_id\\":\\"' + imageId + '\\"}"', 5);
+
+        if (chkLockOriginal.value) {
+            for (var m = 0; m < origLayers.length; m++) {
+                try {
+                    origLayers[m].visible = false;
+                    origLayers[m].locked = true;
+                } catch (_) {}
+            }
+        }
+
+        alert(
+            "Đã rã banner thành công!\n\n" +
+            "• Đã tạo " + importedCount + " layer riêng biệt cho từng thành phần trên Artboard.\n" +
+            "• Tổng cộng SAM AI phát hiện: " + totalFound + " vùng.",
+            "Rã Banner Hoàn Tất"
+        );
+
+    } else {
+        // Tác vụ Tách chủ thể / Bù nền
         var curlArgs = '-X POST -F "file=@' + tempExportFile.fsName + '" ' +
-            '-F "model=' + selectedModel + '" ' +
+            '-F "model=isnet-general-use" ' +
             '-F "extract_subject=true" ' +
             '-F "inpaint_background=' + (isInpaint ? "true" : "false") + '"';
 
@@ -207,7 +302,8 @@
         try { tempExportFile.remove(); } catch (_) {}
 
         if (!result || result.status !== "success") {
-            alert("Lỗi từ AI Server: " + (result ? result.error : "Không nhận được phản hồi."), "Thất bại");
+            var procErrMsg = result && result.error ? result.error : "Không nhận được phản hồi từ AI Server.";
+            alert("Lỗi từ AI Server: " + procErrMsg, "Thất bại");
             return;
         }
 
@@ -234,7 +330,7 @@
             var fgFile = new File(result.foreground);
             if (fgFile.exists) {
                 var fgLayer = doc.layers.add();
-                fgLayer.name = "AI - Chủ thể (" + selectedModel + ")";
+                fgLayer.name = "AI - Chủ thể (IS-Net)";
                 var fgPlaced = fgLayer.placedItems.add();
                 fgPlaced.file = fgFile;
                 fgPlaced.left = abLeft;
@@ -247,7 +343,6 @@
             }
         }
 
-        // Khóa/ẩn layer gốc nếu được chọn
         if (chkLockOriginal.value) {
             for (var k = 0; k < origLayers.length; k++) {
                 try {
@@ -258,110 +353,10 @@
         }
 
         alert(
-            "Tách layer thành công!\n" +
+            "Tách layer thành công!\n\n" +
             "• Đã thêm Layer: " + (isInpaint ? "Chủ thể & Nền đã bù" : "Chủ thể riêng biệt") + "\n" +
             "• Thời gian xử lý: " + (result.elapsed_seconds || "---") + "s",
             "AI Layer Splitter Hoàn Tất"
-        );
-
-    } else if (isDecomposeBanner) {
-        // Tác vụ rã banner (SAM AI)
-        var autoArgs = '-X POST -F "file=@' + tempExportFile.fsName + '" -F "quality=balanced"';
-        var autoResult = runCurl(SERVER_URL + "/segment_auto", autoArgs, 300);
-
-        try { tempExportFile.remove(); } catch (_) {}
-
-        if (!autoResult || autoResult.status !== "success" || !autoResult.objects) {
-            alert("Lỗi khi phân tích banner bằng AI SAM: " + (autoResult ? autoResult.error : "Không nhận được phản hồi."), "Thất bại");
-            return;
-        }
-
-        var imageId = autoResult.image_id;
-        var objects = autoResult.objects;
-        var totalFound = objects.length;
-
-        // Giới hạn số layer nhập để tránh treo Illustrator (ưu tiên các vùng chính default_selected !== false)
-        var importList = [];
-        for (var o = 0; o < objects.length; o++) {
-            if (objects[o].default_selected !== false) {
-                importList.push(objects[o]);
-            }
-        }
-        if (importList.length === 0) importList = objects.slice(0, 15);
-
-        var importedCount = 0;
-        for (var idx = 0; idx < importList.length; idx++) {
-            var item = importList[idx];
-            // Gọi export từng vùng
-            var exportArgs = '-H "Content-Type: application/json" -d "{\\"image_id\\":\\"' + imageId + '\\",\\"object_id\\":\\"' + item.id + '\\"}"';
-            var expRes = runCurl(SERVER_URL + "/segment_auto_export", exportArgs, 60);
-
-            if (expRes && expRes.status === "success" && expRes.foreground_base64) {
-                // Giải mã Base64 sang file tạm qua script VBS/BAT
-                var objTempFile = new File(Folder.temp + "/ai_obj_" + item.id + "_" + (new Date().getTime()) + ".png");
-                var b64TempTxt = new File(Folder.temp + "/ai_obj_" + item.id + ".b64");
-                b64TempTxt.open("w");
-                b64TempTxt.write(expRes.foreground_base64);
-                b64TempTxt.close();
-
-                // Dùng certutil giải mã Base64 sang PNG
-                var decBat = new File(Folder.temp + "/decode_" + item.id + ".bat");
-                decBat.open("w");
-                decBat.writeln('@echo off');
-                decBat.writeln('certutil -decode "' + b64TempTxt.fsName + '" "' + objTempFile.fsName + '" > nul');
-                decBat.close();
-                decBat.execute();
-
-                // Chờ giải mã
-                var w = 0;
-                while (!objTempFile.exists && w < 30) {
-                    $.sleep(100);
-                    w++;
-                }
-
-                if (objTempFile.exists && objTempFile.length > 0) {
-                    var objLayer = doc.layers.add();
-                    objLayer.name = "AI - " + (item.category || "Phần") + " (" + item.name + ")";
-                    var objPlaced = objLayer.placedItems.add();
-                    objPlaced.file = objTempFile;
-
-                    // Tính tỷ lệ vị trí trên Artboard
-                    var scaleX = abWidth / expRes.canvas_width;
-                    var scaleY = abHeight / expRes.canvas_height;
-
-                    objPlaced.left = abLeft + (expRes.crop_x * scaleX);
-                    objPlaced.top = abTop - (expRes.crop_y * scaleY);
-                    objPlaced.width = expRes.width * scaleX;
-                    objPlaced.height = expRes.height * scaleY;
-
-                    if (chkEmbed.value) {
-                        try { objPlaced.embed(); } catch (_) {}
-                    }
-                    importedCount++;
-                }
-
-                try { b64TempTxt.remove(); } catch (_) {}
-                try { decBat.remove(); } catch (_) {}
-            }
-        }
-
-        // Đóng session
-        runCurl(SERVER_URL + "/segment_auto_close", '-H "Content-Type: application/json" -d "{\\"image_id\\":\\"' + imageId + '\\"}"', 5);
-
-        if (chkLockOriginal.value) {
-            for (var m = 0; m < origLayers.length; m++) {
-                try {
-                    origLayers[m].visible = false;
-                    origLayers[m].locked = true;
-                } catch (_) {}
-            }
-        }
-
-        alert(
-            "Đã rã banner thành công!\n" +
-            "• Đã tạo " + importedCount + " layer riêng biệt tương ứng với từng chi tiết trên Artboard.\n" +
-            "• Tìm thấy tổng cộng " + totalFound + " vùng nhận diện bởi SAM AI.",
-            "Rã Banner Hoàn Tất"
         );
     }
 })();
