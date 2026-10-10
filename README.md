@@ -47,3 +47,22 @@ pip install -r requirements.txt
 2. Chọn **Add Plugin** và trỏ đến thư mục chứa file `manifest.json`.
 3. Bấm **Load** để nạp plugin vào Photoshop.
 4. Mở Photoshop, vào menu `Plugins` > `Photoshop AI Layer Splitter` để sử dụng!
+
+---
+
+## Bản nâng cấp giao diện và khởi động an toàn
+
+- Website GitHub Pages là **bản xem trước giao diện**; xử lý ảnh thật cần chạy trong panel UXP của Photoshop.
+- `bootstrap.js` chọn đúng chế độ: `index.js` trong Photoshop, `preview.js` trên trình duyệt thông thường.
+- Giao diện có trạng thái server rõ ràng, tùy chọn dễ đọc, bố cục thích ứng panel hẹp và hỗ trợ focus bàn phím.
+- Script khởi động không còn dừng toàn bộ tiến trình `python.exe`/`pythonw.exe`; nó kiểm tra server trước để tránh mở tiến trình trùng.
+
+### Cài đặt / cập nhật
+
+1. Cài Python tương thích và thư viện bằng `pip install -r requirements.txt`.
+2. Chạy `run_ai_server.bat`, chờ model AI khởi tạo xong.
+3. Trong Adobe UXP Developer Tool, thêm plugin bằng cách chọn file `manifest.json`, sau đó Load.
+4. Mở panel **AI Layer Splitter** trong Photoshop và bấm **Kiểm tra AI Server**.
+5. Chạy `cai_dat_tu_dong_chay.bat` nếu muốn thêm server vào mục khởi động Windows.
+
+> Lưu ý: tạo nền bằng OpenCV Inpainting là nội suy điểm ảnh, không phải Generative Fill. Với nền nhiều chi tiết, có thể cần chỉnh sửa thủ công.
