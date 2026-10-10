@@ -33,6 +33,14 @@ if "%PY_CMD%"=="" (
     exit /b 1
 )
 
+where git.exe >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Chua tim thay Git. Cai Git for Windows truoc:
+    echo https://git-scm.com/download/win
+    pause
+    exit /b 1
+)
+
 echo [1/3] Kiem tra PyTorch va TorchVision...
 %PY_CMD% -c "import torch, torchvision" >nul 2>&1
 if errorlevel 1 (
@@ -61,11 +69,13 @@ if errorlevel 1 (
 
 echo.
 echo [3/3] Tai model SAM ViT-B...
-if not exist "%~dp0models" mkdir "%~dp0models"
-if exist "%~dp0models\sam_vit_b_01ec64.pth" (
+set "MODEL_DIR=%~dp0models"
+if not exist "%MODEL_DIR%" mkdir "%MODEL_DIR%"
+if exist "%MODEL_DIR%\sam_vit_b_01ec64.pth" (
     echo [OK] Da co file model, bo qua tai lai.
 ) else (
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; Invoke-WebRequest -Uri 'https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth' -OutFile '%~dp0models\sam_vit_b_01ec64.pth'"
+    echo Dang tai checkpoint; giu cua so mo den khi hoan tat...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; Invoke-WebRequest -Uri 'https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth' -OutFile (Join-Path $env:MODEL_DIR 'sam_vit_b_01ec64.pth')"
     if errorlevel 1 (
         echo [ERROR] Tai model that bai. Kiem tra mang va thu chay lai file nay.
         pause
