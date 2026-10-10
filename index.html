@@ -1,88 +1,128 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="vi">
-
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="stylesheet" href="style.css">
-    <title>AI Auto Layer Splitter</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#111827">
+  <meta name="description" content="AI Layer Splitter — tách chủ thể và tạo layer nền trong Adobe Photoshop bằng AI cục bộ.">
+  <title>AI Layer Splitter · Photoshop</title>
+  <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
-    <main class="container">
-        <header class="header">
-            <div class="brand-mark">AI</div>
-            <div class="heading-copy">
-                <h1>AI LAYER SPLITTER</h1>
-                <p class="subtitle">Tách chủ thể và tạo nền riêng trong Photoshop</p>
-            </div>
-        </header>
+  <main class="container">
+    <header class="header">
+      <div class="brand-mark" aria-hidden="true">AI</div>
+      <div class="heading-copy">
+        <div class="eyebrow">PHOTOSHOP WORKFLOW</div>
+        <h1>AI Layer Splitter</h1>
+        <p class="subtitle">Tách chủ thể, giữ layer gốc và xử lý nền ngay trên máy.</p>
+      </div>
+      <span class="version-pill">v2.1</span>
+    </header>
 
-        <section class="options" aria-label="Tuỳ chọn xử lý">
-            <div class="model-select-group">
-                <label for="selModel" class="field-label">
-                    <strong>Chất lượng tách (Model AI):</strong>
-                </label>
-                <select id="selModel" class="model-select">
-                    <option value="isnet-general-use" selected>Siêu nét (IS-Net) · Banner, Đồ họa</option>
-                    <option value="u2net">Tiêu chuẩn (U2-Net Full) · Cân bằng</option>
-                    <option value="u2netp">Nhanh nhẹ (U2-Net Lite) · Tốc độ cao</option>
-                </select>
-            </div>
-            <div class="option-divider"></div>
-            <label class="option-row" for="chkPerson">
-                <input type="checkbox" id="chkPerson" checked>
-                <span class="option-copy">
-                    <strong>Tách người &amp; vật thể</strong>
-                    <small>Tạo layer chủ thể có nền trong suốt</small>
-                </span>
-            </label>
-            <div class="option-divider"></div>
-            <label class="option-row" for="chkFillHoles">
-                <input type="checkbox" id="chkFillHoles" checked>
-                <span class="option-copy">
-                    <strong>Lấp lỗ rỗng bên trong (Khuyên dùng)</strong>
-                    <small>Tránh thủng touchpad, phím, màn hình laptop</small>
-                </span>
-            </label>
-            <div class="option-divider"></div>
-            <label class="option-row" for="chkRefineEdges">
-                <input type="checkbox" id="chkRefineEdges" checked>
-                <span class="option-copy">
-                    <strong>Làm mịn viền &amp; Khử răng cưa</strong>
-                    <small>Khử viền trắng lem, làm nét viền chữ &amp; icon</small>
-                </span>
-            </label>
-            <div class="option-divider"></div>
-            <label class="option-row" for="chkInpaint">
-                <input type="checkbox" id="chkInpaint">
-                <span class="option-copy">
-                    <strong>Bù nền sau khi tách (OpenCV Inpainting)</strong>
-                    <small>Tạo layer nền đã xóa chủ thể (phù hợp nền đơn giản)</small>
-                </span>
-            </label>
-        </section>
+    <aside id="previewNotice" class="preview-notice" hidden aria-live="polite">
+      <div class="notice-icon" aria-hidden="true">i</div>
+      <div>
+        <strong>Bạn đang xem bản website</strong>
+        <p>Trang GitHub Pages chỉ dùng để xem giao diện. Muốn xử lý ảnh thật, hãy nạp plugin này trong Adobe Photoshop bằng UXP Developer Tool.</p>
+      </div>
+    </aside>
 
-        <div class="actions">
-            <button id="btnProcess" class="btn-primary">TÁCH LAYER NGAY</button>
-            <button id="btnCheck" class="btn-secondary">Kiểm tra AI Server</button>
+    <div class="trust-row" aria-label="Thông tin xử lý">
+      <span class="trust-chip"><span class="chip-dot"></span> AI chạy cục bộ</span>
+      <span class="trust-chip">Layer gốc được giữ lại</span>
+    </div>
+
+    <section class="panel" aria-labelledby="modelHeading">
+      <div class="section-heading">
+        <span class="step-number">01</span>
+        <div>
+          <h2 id="modelHeading">Chất lượng AI</h2>
+          <p>Chọn mô hình theo độ chi tiết và tốc độ.</p>
         </div>
+      </div>
+      <label for="selModel" class="field-label">Mô hình tách chủ thể</label>
+      <select id="selModel" class="model-select">
+        <option value="isnet-general-use" selected>IS-Net · Chi tiết cao — banner, đồ họa</option>
+        <option value="u2net">U²-Net · Cân bằng chất lượng/tốc độ</option>
+        <option value="u2netp">U²-Net Lite · Nhẹ và nhanh</option>
+      </select>
+    </section>
 
-        <section class="status-card" aria-live="polite">
-            <div class="status-heading">
-                <span class="status-dot" id="statusDot"></span>
-                <strong id="statusText">Sẵn sàng</strong>
-            </div>
-            <div class="progress-track" role="progressbar" aria-label="Tiến trình xử lý" aria-valuemin="0"
-                aria-valuemax="100" aria-valuenow="0">
-                <div id="progressBar" class="progress-fill"></div>
-            </div>
-            <p id="detailText" class="detail-text">Mở ảnh trong Photoshop, chọn các tuỳ chọn rồi bắt đầu.</p>
-        </section>
+    <section class="panel" aria-labelledby="tasksHeading">
+      <div class="section-heading">
+        <span class="step-number">02</span>
+        <div>
+          <h2 id="tasksHeading">Tùy chọn xử lý</h2>
+          <p>Bật các tác vụ cần thiết cho ảnh hiện tại.</p>
+        </div>
+      </div>
 
-        <p class="footnote">Ảnh gốc được giữ lại. Khi tạo nền mới, layer gốc sẽ được ẩn chứ không bị xoá.</p>
-    </main>
-    <script src="index.js"></script>
+      <div class="option-list">
+        <label class="option-row" for="chkPerson">
+          <input type="checkbox" id="chkPerson" checked>
+          <span class="option-icon" aria-hidden="true">✂</span>
+          <span class="option-copy">
+            <strong>Tách chủ thể</strong>
+            <small>Tạo layer người/vật thể với nền trong suốt.</small>
+          </span>
+          <span class="option-tag">Cơ bản</span>
+        </label>
+
+        <label class="option-row" for="chkFillHoles">
+          <input type="checkbox" id="chkFillHoles" checked>
+          <span class="option-icon" aria-hidden="true">◌</span>
+          <span class="option-copy">
+            <strong>Lấp vùng rỗng nhỏ</strong>
+            <small>Hạn chế lỗ thủng trong vùng chủ thể, ví dụ màn hình hoặc phím.</small>
+          </span>
+        </label>
+
+        <label class="option-row" for="chkRefineEdges">
+          <input type="checkbox" id="chkRefineEdges" checked>
+          <span class="option-icon" aria-hidden="true">✧</span>
+          <span class="option-copy">
+            <strong>Làm mịn viền</strong>
+            <small>Giảm răng cưa và nhiễu nhỏ quanh mép ảnh.</small>
+          </span>
+        </label>
+
+        <label class="option-row" for="chkInpaint">
+          <input type="checkbox" id="chkInpaint">
+          <span class="option-icon" aria-hidden="true">▧</span>
+          <span class="option-copy">
+            <strong>Tạo layer nền đã xóa chủ thể</strong>
+            <small>OpenCV Inpainting phù hợp nền đơn giản; nền phức tạp có thể còn dấu vết.</small>
+          </span>
+          <span class="option-tag option-tag-muted">Tùy chọn</span>
+        </label>
+      </div>
+    </section>
+
+    <div class="actions">
+      <button id="btnProcess" class="btn-primary" type="button">
+        <span aria-hidden="true">✦</span> Tách layer ngay
+      </button>
+      <button id="btnCheck" class="btn-secondary" type="button">Kiểm tra AI Server</button>
+    </div>
+
+    <section class="status-card" aria-labelledby="statusText" aria-live="polite">
+      <div class="status-topline">
+        <span id="statusDot" class="status-dot" aria-hidden="true"></span>
+        <strong id="statusText">Sẵn sàng xử lý</strong>
+        <span class="status-label">TRẠNG THÁI</span>
+      </div>
+      <div class="progress-track" role="progressbar" aria-label="Tiến trình xử lý" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div id="progressBar" class="progress-fill"></div>
+      </div>
+      <p id="detailText" class="detail-text">Mở tài liệu trong Photoshop, chọn tác vụ và bắt đầu. Ảnh gốc không bị xóa.</p>
+    </section>
+
+    <footer class="footer">
+      <span class="footer-mark" aria-hidden="true">⌘</span>
+      <p><strong>Quy trình an toàn</strong><br>Layer kết quả được thêm riêng. Khi chọn tạo nền mới, layer gốc chỉ bị ẩn để bạn có thể khôi phục bất cứ lúc nào.</p>
+    </footer>
+  </main>
+  <script src="bootstrap.js"></script>
 </body>
-
 </html>
