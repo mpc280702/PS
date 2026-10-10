@@ -141,12 +141,12 @@ button:disabled { opacity: .55; cursor: wait; }
 #segScore { color: #9fc3ff; font-weight: 700; text-align: right; }
 .seg-name-input { display: block; width: 100%; min-width: 0; margin: 0 0 10px; padding: 9px 10px; border: 1px solid #34435a; border-radius: 8px; color: var(--text); background: #111722; font-size: 11px; }
 .seg-name-input::placeholder { color: #77869a; }
-.seg-actions { display: grid; grid-template-columns: .8fr 1.2fr; gap: 8px; }
-.seg-actions button { min-height: 36px; padding: 8px 9px; font-size: 10px; }
+.seg-actions { display: flex; gap: 8px; width: 100%; }
+.seg-actions button { flex: 1; min-height: 36px; padding: 8px 9px; font-size: 10.5px; }
 .seg-hint { margin: 9px 1px 0; color: var(--muted-2); font-size: 9.5px; line-height: 1.5; overflow-wrap: anywhere; }
 .seg-hint.error { color: var(--error); }
 .seg-hint.success { color: var(--success); }
 @media (max-width: 360px) {
   .seg-body { padding-right: 11px; padding-left: 11px; }
-  .seg-actions { grid-template-columns: 1fr; }
+  .seg-actions { flex-direction: column; }
 }
