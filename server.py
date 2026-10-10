@@ -558,6 +558,50 @@ def _auto_thumbnail(image: Image.Image, mask: np.ndarray, bbox: tuple[int, int, 
     return encode_png_base64(thumbnail)
 
 
+
+def _diversify_banner_candidates(candidates: list[dict[str, Any]], limit: int, width: int, height: int) -> list[dict[str, Any]]:
+    """Choose masks from different size bands and image regions, not only largest masks."""
+    buckets: dict[tuple[int, int, int], list[dict[str, Any]]] = {}
+    for item in candidates:
+        x, y, bw, bh = item["bbox"]
+        cx = (x + bw / 2) / max(1, width)
+        cy = (y + bh / 2) / max(1, height)
+        area_ratio = item["area"] / max(1, width * height)
+        if area_ratio >= 0.10:
+            band = 0  # broad visual component
+        elif area_ratio >= 0.025:
+            band = 1  # main object / text block
+        elif area_ratio >= 0.005:
+            band = 2  # medium-sized ornament or label
+        else:
+            band = 3  # lettering / fine detail
+        grid_x = min(2, max(0, int(cx * 3)))
+        grid_y = min(2, max(0, int(cy * 3)))
+        key = (band, grid_y, grid_x)
+        item["selection_score"] = 0.62 * item["quality"] + 0.38 * item["stability"]
+        buckets.setdefault(key, []).append(item)
+
+    for bucket in buckets.values():
+        bucket.sort(key=lambda item: item["selection_score"], reverse=True)
+
+    ordered_keys = sorted(buckets)
+    selected: list[dict[str, Any]] = []
+    # Round-robin across spatial and scale buckets to protect smaller regions
+    # in side columns, headers and corners from being crowded out by mountains
+    # or large decorative clusters.
+    while len(selected) < limit:
+        changed = False
+        for key in ordered_keys:
+            if buckets[key]:
+                selected.append(buckets[key].pop(0))
+                changed = True
+                if len(selected) >= limit:
+                    break
+        if not changed:
+            break
+    return selected
+
+
 @app.route("/segment_auto", methods=["POST", "OPTIONS"])
 def segment_auto():
     if request.method == "OPTIONS":
@@ -570,16 +614,19 @@ def segment_auto():
         original = decode_image_request()
         width, height = original.size
         profile = str((request.get_json(silent=True) or {}).get("quality", "balanced")).lower()
+        # The balanced/detail profiles scan one crop layer as well as the full
+        # image. This recovers smaller lettering and ornament masks that are
+        # commonly missed when SAM only samples the whole banner at once.
         profiles = {
-            "coarse": {"points_per_side": 12, "pred_iou_thresh": 0.86, "stability_score_thresh": 0.90, "limit": 24},
-            "balanced": {"points_per_side": 20, "pred_iou_thresh": 0.84, "stability_score_thresh": 0.88, "limit": 40},
-            "detail": {"points_per_side": 28, "pred_iou_thresh": 0.82, "stability_score_thresh": 0.86, "limit": 60},
+            "coarse": {"points_per_side": 12, "pred_iou_thresh": 0.86, "stability_score_thresh": 0.90, "limit": 36, "crop_layers": 0},
+            "balanced": {"points_per_side": 20, "pred_iou_thresh": 0.84, "stability_score_thresh": 0.88, "limit": 72, "crop_layers": 1},
+            "detail": {"points_per_side": 28, "pred_iou_thresh": 0.82, "stability_score_thresh": 0.86, "limit": 120, "crop_layers": 1},
         }
         config = profiles.get(profile, profiles["balanced"])
         predictor, device = get_sam_predictor()
         model = predictor.model
 
-        max_side = 1600
+        max_side = 2048
         scale = min(1.0, max_side / max(width, height))
         work_w = max(1, int(round(width * scale)))
         work_h = max(1, int(round(height * scale)))
@@ -597,19 +644,21 @@ def segment_auto():
                 pred_iou_thresh=config["pred_iou_thresh"],
                 stability_score_thresh=config["stability_score_thresh"],
                 box_nms_thresh=0.72,
-                crop_n_layers=0,
-                min_mask_region_area=max(16, int(work_w * work_h * 0.00035)),
+                crop_n_layers=config["crop_layers"],
+                crop_n_points_downscale_factor=2,
+                crop_overlap_ratio=0.32,
+                min_mask_region_area=max(12, int(work_w * work_h * 0.00012)),
                 output_mode="binary_mask",
             )
             generated = generator.generate(rgb)
 
         total = work_w * work_h
         if profile == "coarse":
-            min_area_ratio, max_area_ratio = 0.0035, 0.68
+            min_area_ratio, max_area_ratio = 0.0025, 0.76
         elif profile == "detail":
-            min_area_ratio, max_area_ratio = 0.00045, 0.72
+            min_area_ratio, max_area_ratio = 0.00018, 0.78
         else:
-            min_area_ratio, max_area_ratio = 0.0012, 0.70
+            min_area_ratio, max_area_ratio = 0.00065, 0.76
         min_area = max(30, int(total * min_area_ratio))
         candidates = []
         for item in generated:
@@ -665,29 +714,61 @@ def segment_auto():
             if not duplicate:
                 unique.append(candidate)
 
-        # Keep a spread of large visual elements and smaller details instead of
-        # returning hundreds of tiny texture fragments.
-        unique.sort(key=lambda item: item["area"], reverse=True)
-        selected = unique[:config["limit"]]
-        if not selected:
+        # First remove near-exact duplicates, then choose a size- and position-
+        # balanced set. The previous version took only the largest masks, which
+        # crowded out small title lettering, labels and decorative flourishes.
+        if not unique:
             return jsonify({
                 "status": "error",
                 "error": "SAM chưa tìm được vùng đủ rõ. Hãy thử mức Chi tiết hoặc dùng chế độ bấm chọn vật thể.",
             }), 422
 
+        selected = _diversify_banner_candidates(unique, config["limit"], work_w, work_h)
+        selected.sort(key=lambda item: item["area"], reverse=True)
+
+        # Mark masks almost fully contained in another candidate as detail layers.
+        # Main groups are selected by default; nested masks stay available but
+        # are opt-in to avoid importing many duplicate/overlapping fragments.
+        parent_indices: list[int | None] = []
+        for child_index, child in enumerate(selected):
+            child_parent = None
+            cx, cy, cw, ch = child["bbox"]
+            for parent_index in range(child_index - 1, -1, -1):
+                parent = selected[parent_index]
+                if child["area"] >= parent["area"] * 0.78:
+                    continue
+                px, py, pw, ph = parent["bbox"]
+                x1, y1 = max(cx, px), max(cy, py)
+                x2, y2 = min(cx + cw, px + pw), min(cy + ch, py + ph)
+                if x2 <= x1 or y2 <= y1:
+                    continue
+                child_crop = child["mask"][y1:y2, x1:x2]
+                parent_crop = parent["mask"][y1:y2, x1:x2]
+                overlap = int(np.logical_and(child_crop, parent_crop).sum())
+                if overlap / max(1, child["area"]) >= 0.92:
+                    child_parent = parent_index
+                    break
+            parent_indices.append(child_parent)
+
         objects = {}
         response_objects = []
+        scale_x = width / max(1, work_w)
+        scale_y = height / max(1, work_h)
         for index, item in enumerate(selected, start=1):
             bx, by, bw, bh = item["bbox"]
             object_id = f"auto-{index:03d}"
             area_percent = round(item["area"] * 100.0 / max(1, total), 3)
             scaled_bbox = (
-                int(round(bx / scale)),
-                int(round(by / scale)),
-                max(1, int(round(bw / scale))),
-                max(1, int(round(bh / scale))),
+                int(round(bx * scale_x)),
+                int(round(by * scale_y)),
+                max(1, int(round(bw * scale_x))),
+                max(1, int(round(bh * scale_y))),
             )
+            parent_index = parent_indices[index - 1]
+            parent_id = f"auto-{parent_index + 1:03d}" if parent_index is not None else None
+            is_main = parent_index is None
             name = _auto_object_name(index, scaled_bbox, (width, height))
+            category = "Phần chính" if is_main else "Chi tiết"
             preview = _auto_thumbnail(work_image, item["mask"], item["bbox"])
             objects[object_id] = {
                 "mask": item["mask"],
@@ -695,10 +776,15 @@ def segment_auto():
                 "area": item["area"],
                 "quality": item["quality"],
                 "stability": item["stability"],
+                "parent_id": parent_id,
+                "default_selected": is_main,
             }
             response_objects.append({
                 "id": object_id,
                 "name": name,
+                "category": category,
+                "parent_id": parent_id,
+                "default_selected": is_main,
                 "bbox": {"x": scaled_bbox[0], "y": scaled_bbox[1], "width": scaled_bbox[2], "height": scaled_bbox[3]},
                 "area_percent": area_percent,
                 "score": round(item["quality"], 3),
