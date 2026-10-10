@@ -192,7 +192,31 @@ async function exportCompositeToPng(sourceDoc, exportFile) {
     }
 }
 
-async function importPngAsLayer(file, targetDoc, name, placement = null) {
+async function createLayerMaskFromTransparency(layer) {
+    if (!layer || !layer.id) {
+        throw new Error('Không xác định được layer để tạo Layer Mask.');
+    }
+
+    const { batchPlay } = require('photoshop').action;
+    await batchPlay([
+        {
+            _obj: 'select',
+            _target: [{ _ref: 'layer', _id: layer.id }],
+            makeVisible: false,
+            _options: { dialogOptions: 'dontDisplay' }
+        },
+        {
+            // Photoshop's native Layer > Layer Mask > From Transparency action.
+            _obj: 'make',
+            new: { _class: 'channel' },
+            at: { _ref: 'channel', _enum: 'channel', _value: 'mask' },
+            using: { _enum: 'userMaskEnabled', _value: 'transparency' },
+            _options: { dialogOptions: 'dontDisplay' }
+        }
+    ], {});
+}
+
+async function importPngAsLayer(file, targetDoc, name, placement = null, createMaskFromTransparency = false) {
     let tempDoc = null;
     try {
         tempDoc = await app.open(file);
@@ -204,8 +228,6 @@ async function importPngAsLayer(file, targetDoc, name, placement = null) {
 
         // Cropped object PNGs save scratch space. After duplicating a cropped
         // image into the source document, restore its original canvas position.
-        // This path is only used when the API returns crop_x/crop_y; ordinary
-        // full-canvas foreground/background imports keep their existing placement.
         if (placement &&
             Number.isFinite(Number(placement.x)) &&
             Number.isFinite(Number(placement.y))) {
@@ -224,8 +246,13 @@ async function importPngAsLayer(file, targetDoc, name, placement = null) {
             await importedLayer.translate(Number(placement.x) - left, Number(placement.y) - top);
         }
 
+        // Close temporary PNG before invoking a mask action on the target document.
         await tempDoc.closeWithoutSaving();
         tempDoc = null;
+
+        if (createMaskFromTransparency) {
+            await createLayerMaskFromTransparency(importedLayer);
+        }
         return importedLayer;
     } finally {
         if (tempDoc) {
@@ -1026,6 +1053,7 @@ btnProcess.addEventListener('click', async () => {
     const model = $('selModel') ? $('selModel').value : 'isnet-general-use';
     const fillHoles = $('chkFillHoles') ? $('chkFillHoles').checked : true;
     const refineEdges = $('chkRefineEdges') ? $('chkRefineEdges').checked : true;
+    const createSubjectLayerMask = $('chkLayerMask') ? $('chkLayerMask').checked : true;
 
     if (!extractSubject && !inpaintBackground) {
         updateStatus('Chưa chọn tác vụ', 'Hãy bật ít nhất một tuỳ chọn xử lý.', 0, 'warning');
@@ -1099,7 +1127,7 @@ btnProcess.addEventListener('click', async () => {
             }
             if (extractSubject) {
                 const layerLabel = data.model === 'isnet-general-use' ? 'AI - Chủ thể siêu nét (IS-Net)' : `AI - Chủ thể (${data.model || 'Tách rời'})`;
-                await importPngAsLayer(resultFiles.foreground, sourceDoc, layerLabel);
+                await importPngAsLayer(resultFiles.foreground, sourceDoc, layerLabel, null, createSubjectLayerMask);
             }
             // Only hide originals after all requested result layers were imported successfully.
             if (inpaintBackground) {
@@ -1110,9 +1138,10 @@ btnProcess.addEventListener('click', async () => {
             }
         }, { commandName: 'AI Layer Splitter - Import Layers' });
 
+        const maskStatus = extractSubject && createSubjectLayerMask ? ' kèm Layer Mask chỉnh sửa được' : '';
         updateStatus('Tách layer thành công', inpaintBackground
-            ? `Đã thêm ${extractSubject ? 'layer chủ thể và layer nền' : 'layer nền'}; layer gốc được giữ lại nhưng đang ẩn.`
-            : 'Đã thêm layer chủ thể. Layer gốc vẫn hiển thị để bạn đối chiếu và có thể tự ẩn khi cần.', 100, 'success');
+            ? `Đã thêm ${extractSubject ? 'layer chủ thể' + maskStatus + ' và layer nền' : 'layer nền'}; layer gốc được giữ lại nhưng đang ẩn.`
+            : `Đã thêm layer chủ thể${maskStatus}. Layer gốc vẫn hiển thị để bạn đối chiếu và có thể tự ẩn khi cần.`, 100, 'success');
     } catch (error) {
         console.error('[AI Layer Splitter]', error);
         updateStatus('Xử lý chưa hoàn tất', error && error.message ? error.message : String(error), 0, 'error');
