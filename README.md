@@ -105,3 +105,28 @@ Với poster/banner có chữ nghệ thuật, mây, hoa lá, biểu tượng và
 - Các layer mới là phần pixel đã tách, có nền trong suốt và giữ nguyên tọa độ canvas. Để tránh làm hỏng thiết kế, mặc định layer gốc vẫn được giữ nguyên và hiển thị.
 - Nếu bật **Ẩn layer gốc sau khi tách**, chỉ các phần được tách còn hiện trên nền trong suốt. Công cụ chưa tự phục dựng nền phức tạp phía sau các vật thể; khi di chuyển phần tử trên banner, bạn có thể cần xóa/retouch vùng cũ hoặc tự dựng layer nền riêng.
 - Mức Chi tiết có thể chậm trên CPU và cần nhiều RAM. Nên thử với bản sao của tài liệu, đặc biệt khi xử lý file khổ lớn.
+
+
+---
+
+## Bản tách banner nhiều thành phần — v2.4
+
+Bản này sửa điểm yếu của v2.3: bản cũ chỉ giữ các mặt nạ lớn trước nên dễ bỏ sót chữ, nhãn nhỏ hoặc họa tiết ở cột bên phải.
+
+Các thay đổi:
+- Mức **Cân bằng** và **Chi tiết** quét thêm các crop để bắt được chữ/họa tiết nhỏ, ngoài lượt phân tích toàn ảnh.
+- Danh sách vùng được chọn theo nhiều dải kích thước và vị trí trên banner, không chỉ lấy các mặt nạ lớn nhất.
+- Mặt nạ nằm gần như hoàn toàn bên trong một vùng khác được đánh dấu **Chi tiết** và không chọn mặc định để tránh nhập trùng hàng loạt.
+- Nút **Phần chính** chọn các cụm chính được đề xuất; **Tất cả** bật mọi vùng ứng viên; có thể bỏ chọn vùng nền lớn/vùng sai.
+- Tọa độ vùng chọn được quy đổi độc lập theo chiều ngang/dọc để giữ đúng kích thước canvas khi ảnh được thu nhỏ cho AI.
+
+Cách dùng:
+1. Cài/cập nhật source mới, sau đó chạy cai_dat_sam.bat nếu SAM chưa được cài.
+2. Khởi động lại run_ai_server.bat và nạp lại plugin bằng UXP Developer Tool.
+3. Mở banner, chạy **Phân tích toàn banner** ở mức Cân bằng trước. Nếu còn thiếu chi tiết nhỏ, chạy lại ở mức Chi tiết.
+4. Bấm **Phần chính** để nhập các vùng lớn hơn trước. Xem thumbnail, sau đó bật thêm các vùng **Chi tiết** cần thiết. Đổi tên layer trước khi nhập.
+
+Lưu ý:
+- SAM là mô hình phân đoạn theo hình ảnh, không phải mô hình hiểu cấu trúc thiết kế/kiểu chữ hoàn hảo. Một chữ nghệ thuật có thể tách thành nhiều mặt nạ hoặc một cụm nhiều ký tự có thể thành một vùng.
+- Các mặt nạ vẫn có thể chồng lấn. Giữ layer gốc hiển thị trong lúc kiểm tra; chỉ ẩn layer gốc khi đã chắc chắn các vùng quan trọng đều được giữ.
+- Công cụ không tự tái tạo pixel nền bị che sau khi di chuyển phần tử. Muốn banner tái cấu trúc hoàn chỉnh, bước dựng nền và kiểm soát thứ tự lớp vẫn có thể cần thao tác thủ công.
