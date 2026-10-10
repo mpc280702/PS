@@ -1,0 +1,49 @@
+name: Source checks
+
+on:
+  push:
+    branches: ["main", "feature/**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  syntax-and-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate JavaScript syntax
+        run: |
+          node --check index.js
+          node --check bootstrap.js
+          node --check preview.js
+      - name: Validate Python syntax
+        run: python -m py_compile server.py
+      - name: Validate manifest and UI contracts
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          manifest = json.loads(Path("manifest.json").read_text(encoding="utf-8"))
+          assert manifest["version"] == "2.2.0", manifest.get("version")
+          html = Path("index.html").read_text(encoding="utf-8")
+          required = [
+              "btnLoadSegImage", "segPointMode", "segPreviewImage",
+              "segOverlayCanvas", "btnClearPoints", "btnAddObject",
+              "btnProcess", "btnCheck", "statusText", "detailText",
+          ]
+          missing = [item for item in required if f'id="{item}"' not in html]
+          assert not missing, f"Missing UI elements: {missing}"
+          server = Path("server.py").read_text(encoding="utf-8")
+          for route in ("/sam_health", "/segment_init", "/segment_point", "/segment_export", "/segment_close"):
+              assert f'"{route}"' in server, f"Missing route {route}"
+          print("Manifest, segmentation UI and API contract checks passed.")
+          PY
