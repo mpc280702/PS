@@ -492,6 +492,7 @@ const chkAutoHideOriginal = $('chkAutoHideOriginal');
 let autoSegImageId = null;
 let autoSegDocumentId = null;
 let autoSegTargetDoc = null;
+let autoSegOriginalLayers = [];
 let autoSegObjects = [];
 let autoSegBusy = false;
 
@@ -634,6 +635,7 @@ if (btnAnalyzeBanner) {
             autoSegImageId = data.image_id;
             autoSegDocumentId = sourceDoc.id;
             autoSegTargetDoc = sourceDoc;
+            autoSegOriginalLayers = Array.from(sourceDoc.layers);
             renderAutoObjectList(data.objects);
 
             const deviceLabel = data.device === 'cuda' ? 'GPU' : 'CPU';
@@ -724,11 +726,8 @@ if (btnImportMasks) {
             }
 
             if (chkAutoHideOriginal && chkAutoHideOriginal.checked) {
-                // Original layers are hidden only after all chosen masks were imported successfully.
-                const sourceTopLayers = Array.from(autoSegTargetDoc.layers);
-                for (const layer of sourceTopLayers) {
-                    const layerName = String(layer.name || '');
-                    if (layerName.indexOf('AI - ') === 0 || layerName.indexOf('AI ') === 0) continue;
+                // Hide exactly the layers that existed before object layers were imported.
+                for (const layer of autoSegOriginalLayers) {
                     try { layer.visible = false; } catch (_) {}
                 }
             }
