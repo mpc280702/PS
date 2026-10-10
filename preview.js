@@ -23,6 +23,12 @@
     if (detailText) detailText.textContent = "1) Cài Python và thư viện trong requirements.txt. 2) Chạy run_ai_server.bat. 3) Mở Adobe UXP Developer Tool, chọn Add Plugin và trỏ đến manifest.json, sau đó Load. 4) Trong Photoshop, mở Plugins → AI Layer Splitter.";
     if (statusDot) statusDot.className = "status-dot warning";
   });
+  var buttonLoadSegImage = $("btnLoadSegImage");
+  if (buttonLoadSegImage) buttonLoadSegImage.addEventListener("click", function () {
+    if (statusText) statusText.textContent = "Tách vật thể cần chạy trong Photoshop";
+    if (detailText) detailText.textContent = "Website GitHub Pages chỉ xem trước giao diện. Để tách từng vật thể, hãy chạy cai_dat_sam.bat, khởi động lại AI Server, rồi mở plugin trong Photoshop và bấm Nạp ảnh từ Photoshop.";
+    if (statusDot) statusDot.className = "status-dot warning";
+  });
   if (buttonCheck) buttonCheck.addEventListener("click", function () {
     if (statusText) statusText.textContent = "Kiểm tra server trong plugin";
     if (detailText) detailText.textContent = "Trình duyệt GitHub Pages không kiểm tra được AI Server cục bộ một cách đáng tin cậy. Hãy mở panel AI Layer Splitter bên trong Photoshop rồi bấm Kiểm tra AI Server.";
