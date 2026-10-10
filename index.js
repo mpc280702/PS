@@ -249,12 +249,15 @@ async function importPngAsLayer(file, targetDoc, name, placement = null, createM
             await importedLayer.translate(Number(placement.x) - left, Number(placement.y) - top);
         }
 
+        // Close the temporary PNG document first so Photoshop returns to the
+        // target document before creating a mask on the duplicated subject layer.
+        await tempDoc.closeWithoutSaving();
+        tempDoc = null;
+
         if (createMaskFromTransparency) {
             await createLayerMaskFromTransparency(importedLayer);
         }
 
-        await tempDoc.closeWithoutSaving();
-        tempDoc = null;
         return importedLayer;
     } finally {
         if (tempDoc) {
