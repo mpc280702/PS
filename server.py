@@ -380,7 +380,7 @@ def segment_init():
         predictor, device = get_sam_predictor()
         original = decode_image_request()
         rgb = np.asarray(original.convert("RGB"), dtype=np.uint8)
-        with SAM_STATE_LOCK:
+        with SAM_STATE_LOCK, inference_lock:
             predictor.set_image(rgb)
             image_id = uuid.uuid4().hex
             SAM_STATE["image_id"] = image_id
@@ -437,11 +437,12 @@ def segment_point():
 
         try:
             predictor, _device = get_sam_predictor()
-            masks, scores, _logits = predictor.predict(
-                point_coords=np.asarray(point_coords, dtype=np.float32),
-                point_labels=np.asarray(point_labels, dtype=np.int32),
-                multimask_output=True,
-            )
+            with inference_lock:
+                masks, scores, _logits = predictor.predict(
+                    point_coords=np.asarray(point_coords, dtype=np.float32),
+                    point_labels=np.asarray(point_labels, dtype=np.int32),
+                    multimask_output=True,
+                )
             best = int(np.argmax(scores))
             mask = np.asarray(masks[best], dtype=bool)
             if mask.shape != (image.height, image.width) or not mask.any():
@@ -673,13 +674,6 @@ def segment_auto():
                 "status": "error",
                 "error": "SAM chưa tìm được vùng đủ rõ. Hãy thử mức Chi tiết hoặc dùng chế độ bấm chọn vật thể.",
             }), 422
-
-        # Give small but confident masks a chance when there are many candidates.
-        if len(unique) > len(selected):
-            remaining = [item for item in unique[config["limit"]:] if item["quality"] >= 0.90 and item["stability"] >= 0.92]
-            for item in remaining[:max(0, config["limit"] // 5)]:
-                selected[-1] = item
-                selected.sort(key=lambda row: row["area"], reverse=True)
 
         objects = {}
         response_objects = []
