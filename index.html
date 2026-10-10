@@ -99,6 +99,40 @@
       </div>
     </section>
 
+    <section class="panel segmentation-panel" aria-labelledby="segHeading">
+      <div class="section-heading">
+        <span class="step-number">03</span>
+        <div>
+          <h2 id="segHeading">Tách từng vật thể chi tiết</h2>
+          <p>Bấm trực tiếp lên vật thể, chỉnh vùng chọn rồi thêm thành layer riêng.</p>
+        </div>
+      </div>
+      <div class="seg-body">
+        <button id="btnLoadSegImage" class="btn-secondary" type="button">Nạp ảnh từ Photoshop</button>
+        <p class="seg-instructions">Chấm <strong>+</strong> vào phần cần giữ. Chuyển sang <strong>−</strong> để chấm vào vùng dính nhầm và loại vùng đó khỏi vật thể. Có thể thêm nhiều điểm để tinh chỉnh viền.</p>
+        <label for="segPointMode" class="field-label seg-field-label">Chế độ điểm chọn</label>
+        <select id="segPointMode" class="model-select seg-select">
+          <option value="1" selected>+ Giữ phần này của vật thể</option>
+          <option value="0">− Loại trừ phần bị chọn nhầm</option>
+        </select>
+        <div id="segPreviewWrap" class="seg-preview-wrap" hidden>
+          <img id="segPreviewImage" alt="Ảnh hiện tại trong Photoshop; bấm lên một vật thể để chọn">
+          <canvas id="segOverlayCanvas" aria-hidden="true"></canvas>
+        </div>
+        <div class="seg-meta">
+          <span id="segPointCount">Chưa có điểm chọn</span>
+          <span id="segScore"></span>
+        </div>
+        <label for="segObjectName" class="field-label seg-field-label">Tên layer (có thể sửa)</label>
+        <input id="segObjectName" class="seg-name-input" type="text" maxlength="80" placeholder="Ví dụ: Chữ NHẬP DIỆN, hoa góc trái…">
+        <div class="seg-actions">
+          <button id="btnClearPoints" class="btn-secondary" type="button" disabled>Xóa điểm chọn</button>
+          <button id="btnAddObject" class="btn-primary" type="button" disabled>Thêm thành layer riêng</button>
+        </div>
+        <p id="segHint" class="seg-hint">Chế độ chi tiết dùng model SAM riêng. Nếu chưa cài model, hãy chạy file cai_dat_sam.bat một lần trên máy này.</p>
+      </div>
+    </section>
+
     <div class="actions">
       <button id="btnProcess" class="btn-primary" type="button">
         <span aria-hidden="true">✦</span> Tách layer ngay
