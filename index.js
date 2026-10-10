@@ -480,6 +480,7 @@ if (btnAddObject) {
 
 /* Full-banner decomposition: generate candidate masks, preview and import selected layers. */
 const btnAnalyzeBanner = $('btnAnalyzeBanner');
+const btnSelectMainMasks = $('btnSelectMainMasks');
 const btnSelectAllMasks = $('btnSelectAllMasks');
 const btnSelectNoMasks = $('btnSelectNoMasks');
 const btnImportMasks = $('btnImportMasks');
@@ -519,6 +520,7 @@ function refreshAutoSelection() {
         autoSegSummary.textContent = selectedCount + ' / ' + totalCount + ' vùng được chọn';
     }
     if (btnImportMasks) btnImportMasks.disabled = autoSegBusy || selectedCount === 0;
+    if (btnSelectMainMasks) btnSelectMainMasks.disabled = autoSegBusy || totalCount === 0;
     if (btnSelectAllMasks) btnSelectAllMasks.disabled = autoSegBusy || totalCount === 0;
     if (btnSelectNoMasks) btnSelectNoMasks.disabled = autoSegBusy || totalCount === 0;
     if (autoSegObjectList) {
@@ -575,20 +577,22 @@ if (btnViewList && btnViewGrid && autoSegObjectList) {
 function renderAutoObjectList(objects) {
     autoSegObjects = (objects || []).map(item => ({
         ...item,
-        layerName: item.name || ('AI - Banner part ' + item.id)
+        layerName: item.layerName || ('AI - ' + (item.category || 'Phần') + ' · ' + (item.name || item.id))
     }));
     autoSegObjectList.replaceChildren();
 
     for (const item of autoSegObjects) {
         const row = document.createElement('div');
-        row.className = 'auto-mask-card is-checked';
+        const isInitiallySelected = item.default_selected !== false;
+        row.className = 'auto-mask-card' + (isInitiallySelected ? ' is-checked' : '');
         row.setAttribute('role', 'listitem');
 
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.className = 'auto-mask-checkbox';
-        checkbox.checked = true;
+        checkbox.checked = isInitiallySelected;
         checkbox.dataset.objectId = item.id;
+        checkbox.dataset.defaultSelected = String(isInitiallySelected);
         checkbox.setAttribute('aria-label', 'Chọn ' + item.name);
 
         const thumb = document.createElement('div');
@@ -607,6 +611,10 @@ function renderAutoObjectList(objects) {
         const copy = document.createElement('div');
         copy.className = 'auto-mask-copy';
 
+        const kind = document.createElement('div');
+        kind.className = 'auto-mask-kind' + (item.parent_id ? ' detail' : '');
+        kind.textContent = item.category || (item.parent_id ? 'Chi tiết' : 'Phần chính');
+
         const title = document.createElement('div');
         title.className = 'auto-mask-title';
         title.textContent = item.name;
@@ -619,6 +627,12 @@ function renderAutoObjectList(objects) {
         const confidence = document.createElement('div');
         confidence.className = 'auto-mask-meta auto-mask-confidence';
         confidence.textContent = 'Điểm AI: ' + Math.round(item.score * 100) + '%';
+
+        const relation = document.createElement('div');
+        relation.className = 'auto-mask-meta';
+        relation.textContent = item.parent_id
+            ? 'Nằm trong cụm ' + item.parent_id + ' · không chọn sẵn để tránh trùng layer'
+            : 'Phần chính · được chọn sẵn';
 
         const nameInput = document.createElement('input');
         nameInput.type = 'text';
@@ -642,7 +656,7 @@ function renderAutoObjectList(objects) {
             }
         });
 
-        copy.append(title, meta, confidence, nameInput);
+        copy.append(kind, title, meta, confidence, relation, nameInput);
         row.append(checkbox, thumb, copy);
         autoSegObjectList.appendChild(row);
     }
@@ -723,6 +737,20 @@ if (btnAnalyzeBanner) {
             }
             await setAutoBusy(false);
         }
+    });
+}
+
+if (btnSelectMainMasks) {
+    btnSelectMainMasks.addEventListener('click', () => {
+        if (autoSegBusy) return;
+        autoSegObjectList.querySelectorAll('.auto-mask-card').forEach(card => {
+            const input = card.querySelector('.auto-mask-checkbox');
+            if (input) {
+                input.checked = input.dataset.defaultSelected !== 'false';
+                card.classList.toggle('is-checked', input.checked);
+            }
+        });
+        refreshAutoSelection();
     });
 }
 
