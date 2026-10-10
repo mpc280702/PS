@@ -293,6 +293,227 @@ def add_cors_headers(response):
     return response
 
 
+
+# Optional precise object segmentation (Meta Segment Anything / SAM ViT-B).
+# It is loaded only when the user opens object-selection mode; the classic
+# rembg workflow continues working when SAM is not installed.
+SAM_CHECKPOINT_PATH = BASE_DIR / "models" / "sam_vit_b_01ec64.pth"
+SAM_STATE: dict[str, Any] = {
+    "predictor": None,
+    "device": None,
+    "image_id": None,
+    "image": None,
+    "mask": None,
+}
+SAM_LOAD_LOCK = threading.Lock()
+SAM_STATE_LOCK = threading.RLock()
+
+
+def get_sam_predictor():
+    """Lazily load SAM once, so optional SAM dependencies never break normal startup."""
+    with SAM_LOAD_LOCK:
+        if SAM_STATE["predictor"] is not None:
+            return SAM_STATE["predictor"], SAM_STATE["device"]
+
+        if not SAM_CHECKPOINT_PATH.is_file():
+            raise RuntimeError(
+                "Chưa cài model tách vật thể chi tiết. Chạy cai_dat_sam.bat trong thư mục plugin, "
+                "đợi tải model hoàn tất rồi khởi động lại AI Server."
+            )
+        try:
+            import torch
+            from segment_anything import SamPredictor, sam_model_registry
+        except Exception as exc:
+            raise RuntimeError(
+                "Thiếu thư viện SAM/PyTorch. Chạy cai_dat_sam.bat để cài chế độ tách vật thể chi tiết."
+            ) from exc
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        log_debug(f"Loading SAM ViT-B on {device}; this can take a while on first use.")
+        try:
+            sam = sam_model_registry["vit_b"](checkpoint=str(SAM_CHECKPOINT_PATH))
+            sam.to(device=device)
+            sam.eval()
+            predictor = SamPredictor(sam)
+        except Exception as exc:
+            raise RuntimeError(f"Không khởi tạo được model SAM: {exc}") from exc
+
+        SAM_STATE["predictor"] = predictor
+        SAM_STATE["device"] = device
+        log_debug(f"SAM ViT-B ready on {device}.")
+        return predictor, device
+
+
+def _mask_overlay_base64(mask: np.ndarray) -> str:
+    """Make a transparent cyan overlay without changing the selected image pixels."""
+    h, w = mask.shape
+    overlay = np.zeros((h, w, 4), dtype=np.uint8)
+    overlay[mask] = (30, 190, 255, 105)
+    contour_image = overlay[:, :, :3].copy()
+    contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if contours:
+        cv2.drawContours(contour_image, contours, -1, (255, 255, 255), 1)
+        overlay[:, :, :3] = contour_image
+    return encode_png_base64(Image.fromarray(overlay, mode="RGBA"))
+
+
+@app.route("/sam_health", methods=["GET", "OPTIONS"])
+def sam_health_check():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    installed = SAM_CHECKPOINT_PATH.is_file()
+    return jsonify({
+        "status": "ok" if installed else "not_installed",
+        "feature": "click_to_segment",
+        "checkpoint_found": installed,
+        "model_loaded": SAM_STATE["predictor"] is not None,
+        "device": SAM_STATE["device"],
+        "message": "SAM sẵn sàng." if installed else "Chạy cai_dat_sam.bat để bật chế độ tách vật thể chi tiết.",
+    }), (200 if installed else 503)
+
+
+@app.route("/segment_init", methods=["POST", "OPTIONS"])
+def segment_init():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    try:
+        predictor, device = get_sam_predictor()
+        original = decode_image_request()
+        rgb = np.asarray(original.convert("RGB"), dtype=np.uint8)
+        with SAM_STATE_LOCK:
+            predictor.set_image(rgb)
+            image_id = uuid.uuid4().hex
+            SAM_STATE["image_id"] = image_id
+            SAM_STATE["image"] = original.copy()
+            SAM_STATE["mask"] = None
+        log_debug(f"SAM image prepared: {original.width}x{original.height} on {device}.")
+        return jsonify({
+            "status": "success",
+            "image_id": image_id,
+            "width": original.width,
+            "height": original.height,
+            "device": device,
+            "message": "Ảnh đã sẵn sàng. Bấm vào bên trong một vật thể để chọn.",
+        })
+    except ValueError as exc:
+        return jsonify({"status": "error", "error": str(exc)}), 400
+    except Exception as exc:
+        log_debug(f"SAM initialization failed: {exc}")
+        return jsonify({"status": "error", "error": str(exc)}), 503
+
+
+@app.route("/segment_point", methods=["POST", "OPTIONS"])
+def segment_point():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    data = request.get_json(silent=True) or {}
+    image_id = data.get("image_id")
+    points = data.get("points")
+    if not isinstance(points, list) or not points or len(points) > 16:
+        return jsonify({"status": "error", "error": "Hãy chọn ít nhất một điểm; hỗ trợ tối đa 16 điểm mỗi vật thể."}), 400
+
+    try:
+        point_coords = []
+        point_labels = []
+        for item in points:
+            if not isinstance(item, dict):
+                raise ValueError("Danh sách điểm không hợp lệ.")
+            x, y, label = float(item["x"]), float(item["y"]), int(item["label"])
+            if label not in (0, 1):
+                raise ValueError("Nhãn điểm chỉ được là 1 (giữ) hoặc 0 (loại trừ).")
+            point_coords.append([x, y])
+            point_labels.append(label)
+        if not any(label == 1 for label in point_labels):
+            raise ValueError("Hãy thêm ít nhất một điểm dương (+) bên trong vật thể trước.")
+    except (KeyError, TypeError, ValueError, OverflowError) as exc:
+        return jsonify({"status": "error", "error": f"Điểm chọn không hợp lệ: {exc}"}), 400
+
+    with SAM_STATE_LOCK:
+        if not image_id or image_id != SAM_STATE["image_id"] or SAM_STATE["image"] is None:
+            return jsonify({"status": "error", "error": "Phiên ảnh đã hết hạn. Hãy nạp lại ảnh Photoshop."}), 409
+        image = SAM_STATE["image"]
+        if any(x < 0 or y < 0 or x >= image.width or y >= image.height for x, y in point_coords):
+            return jsonify({"status": "error", "error": "Điểm chọn nằm ngoài ảnh."}), 400
+
+        try:
+            predictor, _device = get_sam_predictor()
+            masks, scores, _logits = predictor.predict(
+                point_coords=np.asarray(point_coords, dtype=np.float32),
+                point_labels=np.asarray(point_labels, dtype=np.int32),
+                multimask_output=True,
+            )
+            best = int(np.argmax(scores))
+            mask = np.asarray(masks[best], dtype=bool)
+            if mask.shape != (image.height, image.width) or not mask.any():
+                raise RuntimeError("Model không tạo được vùng chọn hợp lệ. Hãy thử điểm khác.")
+            SAM_STATE["mask"] = mask.copy()
+            ys, xs = np.where(mask)
+            bbox = {
+                "x": int(xs.min()),
+                "y": int(ys.min()),
+                "width": int(xs.max() - xs.min() + 1),
+                "height": int(ys.max() - ys.min() + 1),
+            }
+            overlay_base64 = _mask_overlay_base64(mask)
+            area_px = int(mask.sum())
+            return jsonify({
+                "status": "success",
+                "score": round(float(scores[best]), 4),
+                "area_px": area_px,
+                "area_percent": round(area_px * 100.0 / (image.width * image.height), 2),
+                "bbox": bbox,
+                "overlay_base64": overlay_base64,
+                "message": "Đã cập nhật vùng chọn. Thêm điểm (+) để mở rộng hoặc (−) để loại trừ vùng không mong muốn.",
+            })
+        except Exception as exc:
+            log_debug(f"SAM point prediction failed: {exc}")
+            return jsonify({"status": "error", "error": f"Không tách được vật thể: {exc}"}), 500
+
+
+@app.route("/segment_export", methods=["POST", "OPTIONS"])
+def segment_export():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    data = request.get_json(silent=True) or {}
+    image_id = data.get("image_id")
+    with SAM_STATE_LOCK:
+        if not image_id or image_id != SAM_STATE["image_id"] or SAM_STATE["image"] is None:
+            return jsonify({"status": "error", "error": "Phiên ảnh đã hết hạn. Hãy nạp lại ảnh Photoshop."}), 409
+        if SAM_STATE["mask"] is None:
+            return jsonify({"status": "error", "error": "Chưa có vùng chọn. Hãy bấm vào một vật thể trước."}), 400
+        original = SAM_STATE["image"].convert("RGBA")
+        mask = SAM_STATE["mask"].copy()
+        original_alpha = np.asarray(original.getchannel("A"), dtype=np.uint8)
+        alpha = np.minimum(original_alpha, mask.astype(np.uint8) * 255)
+        original.putalpha(Image.fromarray(alpha, mode="L"))
+        return jsonify({
+            "status": "success",
+            "width": original.width,
+            "height": original.height,
+            "foreground_base64": encode_png_base64(original),
+            "message": "Đã tạo PNG trong suốt cho vật thể được chọn.",
+        })
+
+
+@app.route("/segment_close", methods=["POST", "OPTIONS"])
+def segment_close():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    data = request.get_json(silent=True) or {}
+    with SAM_STATE_LOCK:
+        if data.get("image_id") == SAM_STATE["image_id"]:
+            SAM_STATE["image_id"] = None
+            SAM_STATE["image"] = None
+            SAM_STATE["mask"] = None
+            predictor = SAM_STATE["predictor"]
+            if predictor is not None:
+                try:
+                    predictor.reset_image()
+                except Exception:
+                    pass
+    return jsonify({"status": "success"})
+
+
 @app.errorhandler(413)
 def request_too_large(_error):
     return jsonify({"status": "error", "error": "Dữ liệu ảnh vượt giới hạn 250 MB."}), 413
