@@ -196,3 +196,14 @@ The classic **Tách chủ thể** workflow now includes a checked-by-default opt
 - Uncheck **Tạo Layer Mask cho chủ thể** if you prefer the original transparent PNG layer without a separate mask.
 - This option applies to the one-click background-removal/subject-extraction workflow. Automatic banner decomposition continues to use its alpha masks and preservation overlay.
 - The mask conversion uses Photoshop UXP batchPlay. Static checks verify the action wiring; confirm behavior in the installed Photoshop version.
+
+
+---
+
+## v3.0 — Editable masks on every extracted banner object
+
+The automatic **Rã Banner** workflow now has a checked-by-default **Tạo Layer Mask cho từng phần** option. With it enabled, each selected component and the preservation overlay is imported with its alpha/transparency converted to a native Photoshop user mask. The **Tách chi tiết bằng điểm chọn** workflow has its own checked-by-default **Tạo Layer Mask cho vật thể** option.
+
+After extraction, select the mask thumbnail (the white/black rectangle next to the image thumbnail) and paint on it: white reveals, black conceals. This lets you refine edges without directly erasing object pixels. Uncheck the respective option if you want to import layers without an extra user mask.
+
+This uses Photoshop UXP batchPlay's native mask-from-transparency action. Source checks verify JS/Python syntax and UI/API wiring; the final behavior must still be confirmed in the installed Photoshop version.

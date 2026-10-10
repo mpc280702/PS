@@ -16,7 +16,7 @@
       <div class="heading-copy">
         <div class="heading-title-row">
           <h1>AI Layer Splitter</h1>
-          <span class="version-pill">v2.9</span>
+          <span class="version-pill">v3.0</span>
         </div>
         <p class="subtitle">Tách chủ thể &amp; Rã banner bằng AI cục bộ</p>
       </div>
@@ -170,6 +170,10 @@
             <input type="checkbox" id="chkAutoHideOriginal">
             <span>Ẩn layer gốc sau khi nhập (chỉ bật khi lớp phủ đã được tạo)</span>
           </label>
+          <label class="auto-hide-original-row" for="chkBannerLayerMasks">
+            <input type="checkbox" id="chkBannerLayerMasks" checked>
+            <span><strong>Tạo Layer Mask cho từng phần</strong> — thêm mặt nạ chỉnh sửa được cho mỗi cụm, vật thể và lớp phủ</span>
+          </label>
 
           <div id="autoSegSummary" class="auto-seg-summary" hidden></div>
 
@@ -236,6 +240,11 @@
             <div class="seg-input-row">
               <input id="segObjectName" class="seg-name-input" type="text" maxlength="80" placeholder="Tên layer (VD: Bông hoa, chiếc xe...)">
             </div>
+
+            <label class="auto-hide-original-row" for="chkPointLayerMask">
+              <input type="checkbox" id="chkPointLayerMask" checked>
+              <span><strong>Tạo Layer Mask cho vật thể</strong> — cho phép chỉnh viền bằng cọ sau khi thêm layer</span>
+            </label>
 
             <div class="seg-actions">
               <button id="btnClearPoints" class="btn-secondary" type="button" disabled>Xóa điểm</button>
