@@ -1146,13 +1146,14 @@ def process_image():
             refine_edges = bool(data.get("refine_edges", True))
             alpha_matting = bool(data.get("alpha_matting", False))
         else:
-            extract_subject = True
-            do_inpaint = False
-            chosen_model = "isnet-general-use"
-            fill_holes = True
-            remove_speckles = True
-            refine_edges = True
-            alpha_matting = False
+            data = request.form or {}
+            extract_subject = str(data.get("extract_subject", "true")).lower() in ("true", "1", "yes")
+            do_inpaint = str(data.get("inpaint_background", "false")).lower() in ("true", "1", "yes")
+            chosen_model = str(data.get("model", "isnet-general-use")).strip()
+            fill_holes = str(data.get("fill_holes", "true")).lower() in ("true", "1", "yes")
+            remove_speckles = str(data.get("remove_speckles", "true")).lower() in ("true", "1", "yes")
+            refine_edges = str(data.get("refine_edges", "true")).lower() in ("true", "1", "yes")
+            alpha_matting = str(data.get("alpha_matting", "false")).lower() in ("true", "1", "yes")
 
         if not extract_subject and not do_inpaint:
             return jsonify({"status": "error", "error": "Hãy chọn ít nhất một tác vụ xử lý."}), 400

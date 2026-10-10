@@ -153,3 +153,23 @@ Bản v2.6 bổ sung hai điều còn thiếu khi dùng trên poster nhiều h�
 - **Layer phần còn lại:** nếu bật tùy chọn ẩn layer gốc, plugin tạo thêm một layer chứa toàn bộ pixel không thuộc các vùng đã chọn. Layer này giữ lại vùng không được SAM nhận diện, giúp các layer mới khi ghép lại không để lộ checkerboard.
  
 Layer phần còn lại **không phải nền đã phục dựng**. Nó giữ nguyên pixel cũ ở phần chưa tách, nên nếu bạn di chuyển một vật thể, vùng cũ có thể còn trống hoặc cần retouch. Muốn nền mới sạch hoàn toàn sau khi di chuyển các vật thể, cần inpainting/generative fill phù hợp.
+
+---
+
+## Hướng dẫn dùng trên Adobe Illustrator
+
+Bộ công cụ nay đã hỗ trợ **Adobe Illustrator** thông qua script ExtendScript `Illustrator_AI_Layer_Splitter.jsx`:
+
+### Cách cài đặt vào Illustrator:
+1. Nhấp đúp vào file `cai_dat_illustrator.bat` (chọn Run as Administrator khi được hỏi).
+2. Script sẽ tự động sao chép vào thư mục `Presets\...\Scripts` của Adobe Illustrator (ví dụ Illustrator 2026 / 2025 / 2024).
+
+### Cách sử dụng:
+1. Mở Adobe Illustrator và mở file thiết kế / banner cần tách.
+2. Trên thanh menu trên cùng, chọn: **File > Scripts > AI_Layer_Splitter** (hoặc bấm phím tắt **`Ctrl + F12`** và chọn file `Illustrator_AI_Layer_Splitter.jsx`).
+3. Chọn tác vụ:
+   - **Tách chủ thể chính**: Tạo layer `[AI] Chủ thể` chứa người / sản phẩm trong suốt.
+   - **Tách chủ thể + Bù nền tự động (Inpainting)**: Tạo cả layer `[AI] Chủ thể` và `[AI] Nền đã bù`.
+   - **Rã toàn bộ các thành phần trong Banner (SAM AI)**: AI tự quét và rã banner thành từng layer riêng trên Artboard.
+4. Bấm **Bắt đầu xử lý AI**. Các layer mới sẽ tự động được tạo và căn đúng tọa độ trên Artboard của Illustrator.
+
