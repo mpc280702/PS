@@ -539,7 +539,20 @@ const bannerSegQuality = $('bannerSegQuality');
 const autoSegObjectList = $('autoSegObjectList');
 const autoSegSummary = $('autoSegSummary');
 const autoSegHint = $('autoSegHint');
+const chkAutoCreateOverlay = $('chkAutoCreateOverlay');
 const chkAutoHideOriginal = $('chkAutoHideOriginal');
+
+if (chkAutoHideOriginal && chkAutoCreateOverlay) {
+    chkAutoHideOriginal.addEventListener('change', () => {
+        if (chkAutoHideOriginal.checked) chkAutoCreateOverlay.checked = true;
+    });
+    chkAutoCreateOverlay.addEventListener('change', () => {
+        if (chkAutoHideOriginal.checked && !chkAutoCreateOverlay.checked) {
+            chkAutoCreateOverlay.checked = true;
+            setAutoSegHint('Để ẩn layer gốc mà không tạo lỗ caro, lớp phủ bảo toàn phải được bật.', 'warning');
+        }
+    });
+}
 
 let autoSegImageId = null;
 let autoSegDocumentId = null;
@@ -748,6 +761,8 @@ async function setAutoBusy(busy) {
     if (btnClearPoints) btnClearPoints.disabled = busy;
     if (btnAddObject) btnAddObject.disabled = busy || !segmentationHasMask;
     if (segPointMode) segPointMode.disabled = busy;
+    if (chkAutoCreateOverlay) chkAutoCreateOverlay.disabled = busy;
+    if (chkAutoHideOriginal) chkAutoHideOriginal.disabled = busy;
     refreshAutoSelection();
 }
 
@@ -877,17 +892,20 @@ if (btnImportMasks) {
         let importedCount = 0;
         const total = selected.length;
         const hideSourceAfterImport = !!(chkAutoHideOriginal && chkAutoHideOriginal.checked);
+        // Overlay is on by default. Force it on whenever the source is going to be hidden,
+        // because otherwise unselected or missed mask areas would become checkerboard holes.
+        const createPreservationOverlay = hideSourceAfterImport ||
+            !!(chkAutoCreateOverlay && chkAutoCreateOverlay.checked);
         try {
             await setAutoBusy(true);
 
-            // If the user wants to hide the source artwork, import the complement
-            // mask first. It keeps every source pixel not covered by the selected
-            // object masks, so the layer stack remains a complete banner instead
-            // of showing checkerboard holes between detected objects.
-            if (hideSourceAfterImport) {
+            // Import the complementary preservation overlay first, under the selected
+            // object layers. This keeps all original pixels not covered by the selected
+            // masks, even where SAM missed wispy edges, text, water, or tiny decorations.
+            if (createPreservationOverlay) {
                 updateStatus(
-                    'Đang tạo layer phần nền còn lại…',
-                    'Giữ lại toàn bộ pixel chưa nằm trong các vùng đã chọn để banner không bị thủng.',
+                    'Đang tạo lớp phủ bảo toàn banner…',
+                    'Giữ lại các pixel chưa tách và vùng AI bỏ sót để tránh ô caro.',
                     12,
                     'warning'
                 );
@@ -907,10 +925,10 @@ if (btnImportMasks) {
                         await importPngAsLayer(
                             remainderFile,
                             autoSegTargetDoc,
-                            'AI - Nền còn lại (giữ banner liền mạch)',
+                            'AI - Lớp phủ bảo toàn banner',
                             { x: remainder.crop_x, y: remainder.crop_y }
                         );
-                    }, { commandName: 'AI Layer Splitter - Import Remaining Artwork' });
+                    }, { commandName: 'AI Layer Splitter - Import Preservation Overlay' });
                     importedCount += 1;
                 } finally {
                     try { await remainderFile.delete(); } catch (_) {}
@@ -962,11 +980,14 @@ if (btnImportMasks) {
             }
 
             setAutoSegHint(
-                hideSourceAfterImport
-                    ? 'Đã thêm ' + importedCount + ' layer, gồm layer “Nền còn lại” để giữ banner liền mạch khi ẩn ảnh gốc. Các chi tiết vẫn có thể chồng lấn; nếu di chuyển vật thể, phần nền phía sau chưa được phục dựng bằng Generative Fill.'
-                    : 'Đã thêm ' + importedCount + ' layer riêng. Ảnh gốc vẫn được giữ lại để bảo đảm banner không bị thủng. Khi di chuyển vật thể, cần tự phục dựng vùng nền cũ nếu muốn xóa dấu vết.',
+                createPreservationOverlay
+                    ? 'Đã thêm ' + importedCount + ' layer, gồm “Lớp phủ bảo toàn banner” nằm dưới các phần tách để giữ pixel chưa nhận diện và tránh lỗ caro.'
+                    : 'Đã thêm ' + importedCount + ' layer riêng. Lớp phủ bảo toàn đang tắt; hãy giữ layer gốc hiển thị hoặc bật lớp phủ nếu không muốn xuất hiện vùng caro.',
                 'success'
             );
+            if (hideSourceAfterImport && !createPreservationOverlay) {
+                throw new Error('Không thể ẩn layer gốc nếu chưa tạo lớp phủ bảo toàn.');
+            }
             updateStatus('Đã tách các phần thành layer', importedCount + ' layer đã được thêm vào tài liệu Photoshop.', 100, 'success');
         } catch (error) {
             console.error('[Auto banner layer import]', error);

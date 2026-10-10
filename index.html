@@ -16,7 +16,7 @@
       <div class="heading-copy">
         <div class="heading-title-row">
           <h1>AI Layer Splitter</h1>
-          <span class="version-pill">v2.7</span>
+          <span class="version-pill">v2.8</span>
         </div>
         <p class="subtitle">Tách chủ thể &amp; Rã banner bằng AI cục bộ</p>
       </div>
@@ -153,9 +153,13 @@
             ✦ Phân tích toàn banner
           </button>
 
+          <label class="auto-hide-original-row" for="chkAutoCreateOverlay">
+            <input type="checkbox" id="chkAutoCreateOverlay" checked>
+            <span><strong>Tạo lớp phủ bảo toàn banner</strong> — giữ các pixel chưa được tách, tránh lỗ caro (khuyên dùng)</span>
+          </label>
           <label class="auto-hide-original-row" for="chkAutoHideOriginal">
             <input type="checkbox" id="chkAutoHideOriginal">
-            <span>Ẩn layer gốc sau khi tách (tự thêm phần còn lại để banner không bị thủng)</span>
+            <span>Ẩn layer gốc sau khi nhập (chỉ bật khi lớp phủ đã được tạo)</span>
           </label>
 
           <div id="autoSegSummary" class="auto-seg-summary" hidden></div>
