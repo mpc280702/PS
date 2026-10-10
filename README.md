@@ -141,3 +141,15 @@ The object export endpoints now return a tightly cropped PNG plus its original c
 This reduces PNG transfer size, temporary document pixel dimensions, and avoidable scratch-disk usage when importing many banner objects. It cannot replace free scratch-disk space when Photoshop itself reports the disk is full.
  
 If Photoshop still shows Scratch Disks Are Full, follow Adobe's steps: close Photoshop after saving work, free space on the configured scratch disk (Adobe recommends at least 100 GB free on the primary scratch disk for demanding work), then set another available drive via Edit > Preferences > Scratch Disks. If Photoshop cannot launch, hold Ctrl+Alt while launching to choose a scratch disk. Source: Adobe Help — Troubleshoot scratch disk full errors.
+
+ 
+---
+ 
+## Giữ banner liền mạch khi tách layer — v2.6
+ 
+Bản v2.6 bổ sung hai điều còn thiếu khi dùng trên poster nhiều họa tiết:
+ 
+- **Gom vùng gần nhau thành cụm chính:** các mặt nạ SAM chồng lấn hoặc nằm sát nhau có thể được hợp nhất thành một layer cụm. Các mặt nạ nhỏ vẫn có thể hiện ở mục Chi tiết để bạn chọn riêng. Đây là nhóm hình học theo khoảng cách/vùng giao, không phải nhãn ngữ nghĩa do AI hiểu chắc chắn.
+- **Layer phần còn lại:** nếu bật tùy chọn ẩn layer gốc, plugin tạo thêm một layer chứa toàn bộ pixel không thuộc các vùng đã chọn. Layer này giữ lại vùng không được SAM nhận diện, giúp các layer mới khi ghép lại không để lộ checkerboard.
+ 
+Layer phần còn lại **không phải nền đã phục dựng**. Nó giữ nguyên pixel cũ ở phần chưa tách, nên nếu bạn di chuyển một vật thể, vùng cũ có thể còn trống hoặc cần retouch. Muốn nền mới sạch hoàn toàn sau khi di chuyển các vật thể, cần inpainting/generative fill phù hợp.
