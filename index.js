@@ -167,7 +167,7 @@ async function exportCompositeToPng(sourceDoc, exportFile) {
     }
 }
 
-async function importPngAsLayer(file, targetDoc, name) {
+async function importPngAsLayer(file, targetDoc, name, placement = null) {
     let tempDoc = null;
     try {
         tempDoc = await app.open(file);
@@ -176,6 +176,29 @@ async function importPngAsLayer(file, targetDoc, name) {
         }
         const importedLayer = await tempDoc.layers[0].duplicate(targetDoc);
         importedLayer.name = name;
+
+        // Cropped object PNGs save scratch space. After duplicating a cropped
+        // image into the source document, restore its original canvas position.
+        // This path is only used when the API returns crop_x/crop_y; ordinary
+        // full-canvas foreground/background imports keep their existing placement.
+        if (placement &&
+            Number.isFinite(Number(placement.x)) &&
+            Number.isFinite(Number(placement.y))) {
+            const bounds = importedLayer.bounds;
+            const readPx = (value) => {
+                if (typeof value === 'number') return value;
+                if (value && typeof value.value === 'number') return value.value;
+                if (value && typeof value._value === 'number') return value._value;
+                return Number(value);
+            };
+            const left = readPx(bounds.left);
+            const top = readPx(bounds.top);
+            if (!Number.isFinite(left) || !Number.isFinite(top)) {
+                throw new Error('Không đọc được tọa độ layer sau khi nhập ảnh đã cắt.');
+            }
+            await importedLayer.translate(Number(placement.x) - left, Number(placement.y) - top);
+        }
+
         await tempDoc.closeWithoutSaving();
         tempDoc = null;
         return importedLayer;
@@ -449,7 +472,10 @@ if (btnAddObject) {
             const layerName = requestedName || ('AI - Vật thể ' + String(segmentationLayerCount + 1).padStart(2, '0') + ' (SAM)');
             updateStatus('Đang thêm vật thể vào Photoshop…', 'Tạo layer độc lập và giữ nguyên kích thước canvas gốc.', 82, 'warning');
             await core.executeAsModal(async () => {
-                await importPngAsLayer(outputFile, targetDoc, layerName.slice(0, 80));
+                await importPngAsLayer(outputFile, targetDoc, layerName.slice(0, 80), {
+                    x: data.crop_x,
+                    y: data.crop_y
+                });
             }, { commandName: 'AI Layer Splitter - Add SAM Object' });
 
             segmentationLayerCount += 1;
@@ -824,7 +850,10 @@ if (btnImportMasks) {
                 try {
                     await base64ToFile(response.foreground_base64, tempFile);
                     await core.executeAsModal(async () => {
-                        await importPngAsLayer(tempFile, autoSegTargetDoc, (item.layerName || item.name).trim().slice(0, 80));
+                        await importPngAsLayer(tempFile, autoSegTargetDoc, (item.layerName || item.name).trim().slice(0, 80), {
+                            x: response.crop_x,
+                            y: response.crop_y
+                        });
                     }, { commandName: 'AI Layer Splitter - Import Banner Part' });
                     importedCount += 1;
                 } finally {
