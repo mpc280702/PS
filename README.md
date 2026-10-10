@@ -173,3 +173,14 @@ Bộ công cụ nay đã hỗ trợ **Adobe Illustrator** thông qua script Exte
    - **Rã toàn bộ các thành phần trong Banner (SAM AI)**: AI tự quét và rã banner thành từng layer riêng trên Artboard.
 4. Bấm **Bắt đầu xử lý AI**. Các layer mới sẽ tự động được tạo và căn đúng tọa độ trên Artboard của Illustrator.
 
+
+
+---
+
+## v2.8 — Preservation overlay (default on)
+
+The banner import panel now has a separate **Tạo lớp phủ bảo toàn banner** checkbox, enabled by default. On batch import, the plugin creates a complementary layer from source pixels outside the union of selected masks, imports it underneath the separated components, and names it **AI - Lớp phủ bảo toàn banner**. This gives missed/undetected pixels a place to remain visible instead of becoming checkerboard holes.
+
+The separate **Ẩn layer gốc sau khi nhập** option is still off by default. Enabling it also forces the preservation overlay on, so source visibility is not removed without a fallback layer.
+
+The overlay retains original pixels and does not reconstruct the background behind moved elements. Review the final layer stack before deleting or permanently hiding source layers.
