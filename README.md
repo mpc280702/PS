@@ -66,3 +66,21 @@ pip install -r requirements.txt
 5. Chạy `cai_dat_tu_dong_chay.bat` nếu muốn thêm server vào mục khởi động Windows.
 
 > Lưu ý: tạo nền bằng OpenCV Inpainting là nội suy điểm ảnh, không phải Generative Fill. Với nền nhiều chi tiết, có thể cần chỉnh sửa thủ công.
+
+
+---
+
+## Tách từng vật thể bằng SAM (mới)
+
+Chế độ tách nền bằng rembg vẫn hoạt động như trước. Với poster, chữ, họa tiết và hình minh họa cần tách riêng, có thể dùng vùng chọn tương tác **SAM**:
+
+1. Chạy \`cai_dat_sam.bat\` một lần trên Windows có Internet. Model SAM ViT-B sẽ được tải vào thư mục \`models\` (dung lượng lớn, chỉ tải lần đầu).
+2. Nếu máy đã cài PyTorch/TorchVision, script giữ nguyên môi trường đó. Nếu chưa có, script mặc định đề nghị bản PyTorch CPU; chọn N nếu bạn muốn tự cài bản CUDA/GPU từ trang PyTorch.
+3. Khởi động lại \`run_ai_server.bat\` sau khi cài.
+4. Mở panel AI Layer Splitter trong Photoshop, bấm **Nạp ảnh từ Photoshop**.
+5. Bấm vào bên trong một vật thể. Dùng điểm \`+\` để giữ thêm phần của vật thể, hoặc \`−\` để loại phần bị dính nhầm. Khi vùng chọn đúng, nhập tên và bấm **Thêm thành layer riêng**.
+6. Lặp lại cho chữ, biểu tượng, mây, hoa lá hoặc chi tiết tiếp theo.
+
+**Cơ chế:** SAM tạo mặt nạ từ điểm người dùng chọn, và plugin xuất vùng đã chọn thành PNG trong suốt với cùng kích thước canvas, rồi nhập vào Photoshop thành layer độc lập. Cách chọn có hướng dẫn này hữu ích hơn việc đoán tất cả đối tượng trong poster tự động; các vùng chồng lấn hoặc chi tiết rất nhỏ có thể vẫn cần thêm điểm +/− để tinh chỉnh.
+
+**Khắc phục:** nếu thấy thông báo chưa cài model, chạy lại \`cai_dat_sam.bat\`, xác nhận có \`models/sam_vit_b_01ec64.pth\`, rồi khởi động lại server. Lần nạp model đầu tiên có thể chậm, đặc biệt khi chạy CPU.
