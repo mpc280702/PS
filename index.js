@@ -49,6 +49,30 @@ async function requestFromServer(path, options = {}, timeoutMs = 300000) {
     throw new Error('Không kết nối được AI Server. Hãy chạy run_ai_server.bat và kiểm tra cổng 5000.');
 }
 
+function getLayersList(doc) {
+    const list = [];
+    if (!doc || !doc.layers) return list;
+    const len = Number(doc.layers.length) || 0;
+    for (let i = 0; i < len; i++) {
+        try {
+            if (doc.layers[i]) list.push(doc.layers[i]);
+        } catch (_) {}
+    }
+    return list;
+}
+
+function isDocumentOpen(docId) {
+    if (!app.documents) return false;
+    const len = Number(app.documents.length) || 0;
+    for (let i = 0; i < len; i++) {
+        try {
+            if (app.documents[i] && app.documents[i].id === docId) return true;
+        } catch (_) {}
+    }
+    return false;
+}
+
+
 async function checkServer(showStatus = true) {
     if (showStatus) updateStatus('Đang kiểm tra server…', 'Đang kết nối đến máy chủ AI trên máy này.', 10, 'warning');
     try {
@@ -105,8 +129,9 @@ function base64ToArrayBuffer(base64Data) {
         } catch (_) {
             throw new Error('Dữ liệu Base64 trả về không thể giải mã.');
         }
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) {
+        const bLen = Math.max(0, Number(binary.length) || 0);
+        const bytes = new Uint8Array(bLen);
+        for (let i = 0; i < bLen; i++) {
             bytes[i] = binary.charCodeAt(i);
         }
         return bytes.buffer;
@@ -118,7 +143,7 @@ function base64ToArrayBuffer(base64Data) {
     let padding = 0;
     if (cleanData.endsWith('==')) padding = 2;
     else if (cleanData.endsWith('=')) padding = 1;
-    const bytesLen = (len * 3 / 4) - padding;
+    const bytesLen = Math.max(0, Math.floor((len * 3 / 4) - padding));
     const bytes = new Uint8Array(bytesLen);
     let byteIdx = 0;
     for (let i = 0; i < len; i += 4) {
@@ -126,7 +151,7 @@ function base64ToArrayBuffer(base64Data) {
         const c2 = lookup[cleanData.charCodeAt(i + 1)];
         const c3 = lookup[cleanData.charCodeAt(i + 2)];
         const c4 = lookup[cleanData.charCodeAt(i + 3)];
-        bytes[byteIdx++] = (c1 << 2) | (c2 >> 4);
+        if (byteIdx < bytesLen) bytes[byteIdx++] = (c1 << 2) | (c2 >> 4);
         if (byteIdx < bytesLen) bytes[byteIdx++] = ((c2 & 15) << 4) | (c3 >> 2);
         if (byteIdx < bytesLen) bytes[byteIdx++] = ((c3 & 3) << 6) | c4;
     }
@@ -531,16 +556,21 @@ function setAutoSegHint(message, type = '') {
 
 function selectedAutoObjects() {
     if (!autoSegObjectList) return [];
-    const selectedIds = new Set(
-        Array.from(autoSegObjectList.querySelectorAll('.auto-mask-checkbox:checked'))
-            .map(input => input.dataset.objectId)
-    );
-    return autoSegObjects.filter(item => selectedIds.has(item.id));
+    const checkboxes = autoSegObjectList.querySelectorAll('.auto-mask-checkbox');
+    const selectedIds = new Set();
+    const len = checkboxes ? checkboxes.length : 0;
+    for (let i = 0; i < len; i++) {
+        const input = checkboxes[i];
+        if (input && input.checked && input.dataset && input.dataset.objectId) {
+            selectedIds.add(input.dataset.objectId);
+        }
+    }
+    return (autoSegObjects || []).filter(item => selectedIds.has(item.id));
 }
 
 function refreshAutoSelection() {
     const selectedCount = selectedAutoObjects().length;
-    const totalCount = autoSegObjects.length;
+    const totalCount = (autoSegObjects || []).length;
     if (autoSegSummary && totalCount) {
         autoSegSummary.hidden = false;
         autoSegSummary.textContent = selectedCount + ' / ' + totalCount + ' vùng được chọn';
@@ -550,10 +580,11 @@ function refreshAutoSelection() {
     if (btnSelectAllMasks) btnSelectAllMasks.disabled = autoSegBusy || totalCount === 0;
     if (btnSelectNoMasks) btnSelectNoMasks.disabled = autoSegBusy || totalCount === 0;
     if (autoSegObjectList) {
-        autoSegObjectList.querySelectorAll('input, button').forEach(control => {
-            control.disabled = autoSegBusy;
-        });
-        // Keep the main import button disabled if no region is checked.
+        const controls = autoSegObjectList.querySelectorAll('input, button');
+        const ctrlLen = controls ? controls.length : 0;
+        for (let i = 0; i < ctrlLen; i++) {
+            controls[i].disabled = autoSegBusy;
+        }
         if (btnImportMasks) btnImportMasks.disabled = autoSegBusy || selectedCount === 0;
     }
 }
@@ -605,9 +636,15 @@ function renderAutoObjectList(objects) {
         ...item,
         layerName: item.layerName || ('AI - ' + (item.category || 'Phần') + ' · ' + (item.name || item.id))
     }));
-    autoSegObjectList.replaceChildren();
+    if (typeof autoSegObjectList.replaceChildren === 'function') {
+        autoSegObjectList.replaceChildren();
+    } else {
+        autoSegObjectList.innerHTML = '';
+    }
 
-    for (const item of autoSegObjects) {
+    const objLen = autoSegObjects.length;
+    for (let i = 0; i < objLen; i++) {
+        const item = autoSegObjects[i];
         const row = document.createElement('div');
         const isInitiallySelected = item.default_selected !== false;
         row.className = 'auto-mask-card' + (isInitiallySelected ? ' is-checked' : '');
@@ -682,13 +719,21 @@ function renderAutoObjectList(objects) {
             }
         });
 
-        copy.append(kind, title, meta, confidence, relation, nameInput);
-        row.append(checkbox, thumb, copy);
+        copy.appendChild(kind);
+        copy.appendChild(title);
+        copy.appendChild(meta);
+        copy.appendChild(confidence);
+        copy.appendChild(relation);
+        copy.appendChild(nameInput);
+
+        row.appendChild(checkbox);
+        row.appendChild(thumb);
+        row.appendChild(copy);
         autoSegObjectList.appendChild(row);
     }
     refreshAutoSelection();
 
-    // Auto-switch to banner tab so user sees the 40 detected regions immediately
+    // Auto-switch to banner tab so user sees the detected regions immediately
     const tabBannerBtn = document.getElementById('tabBtnBanner');
     if (tabBannerBtn && !tabBannerBtn.classList.contains('active')) {
         tabBannerBtn.click();
@@ -742,7 +787,7 @@ if (btnAnalyzeBanner) {
             autoSegImageId = data.image_id;
             autoSegDocumentId = sourceDoc.id;
             autoSegTargetDoc = sourceDoc;
-            autoSegOriginalLayers = Array.from(sourceDoc.layers);
+            autoSegOriginalLayers = getLayersList(sourceDoc);
             renderAutoObjectList(data.objects);
 
             const deviceLabel = data.device === 'cuda' ? 'GPU' : 'CPU';
@@ -768,42 +813,51 @@ if (btnAnalyzeBanner) {
 
 if (btnSelectMainMasks) {
     btnSelectMainMasks.addEventListener('click', () => {
-        if (autoSegBusy) return;
-        autoSegObjectList.querySelectorAll('.auto-mask-card').forEach(card => {
+        if (autoSegBusy || !autoSegObjectList) return;
+        const cards = autoSegObjectList.querySelectorAll('.auto-mask-card');
+        const count = cards ? cards.length : 0;
+        for (let i = 0; i < count; i++) {
+            const card = cards[i];
             const input = card.querySelector('.auto-mask-checkbox');
             if (input) {
                 input.checked = input.dataset.defaultSelected !== 'false';
                 card.classList.toggle('is-checked', input.checked);
             }
-        });
+        }
         refreshAutoSelection();
     });
 }
 
 if (btnSelectAllMasks) {
     btnSelectAllMasks.addEventListener('click', () => {
-        if (autoSegBusy) return;
-        autoSegObjectList.querySelectorAll('.auto-mask-card').forEach(card => {
+        if (autoSegBusy || !autoSegObjectList) return;
+        const cards = autoSegObjectList.querySelectorAll('.auto-mask-card');
+        const count = cards ? cards.length : 0;
+        for (let i = 0; i < count; i++) {
+            const card = cards[i];
             const input = card.querySelector('.auto-mask-checkbox');
             if (input) {
                 input.checked = true;
                 card.classList.add('is-checked');
             }
-        });
+        }
         refreshAutoSelection();
     });
 }
 
 if (btnSelectNoMasks) {
     btnSelectNoMasks.addEventListener('click', () => {
-        if (autoSegBusy) return;
-        autoSegObjectList.querySelectorAll('.auto-mask-card').forEach(card => {
+        if (autoSegBusy || !autoSegObjectList) return;
+        const cards = autoSegObjectList.querySelectorAll('.auto-mask-card');
+        const count = cards ? cards.length : 0;
+        for (let i = 0; i < count; i++) {
+            const card = cards[i];
             const input = card.querySelector('.auto-mask-checkbox');
             if (input) {
                 input.checked = false;
                 card.classList.remove('is-checked');
             }
-        });
+        }
         refreshAutoSelection();
     });
 }
@@ -816,7 +870,7 @@ if (btnImportMasks) {
             setAutoSegHint('Hãy chọn ít nhất một vùng trước khi nhập layer.', 'error');
             return;
         }
-        if (!autoSegTargetDoc || !Array.from(app.documents).some(doc => doc.id === autoSegDocumentId)) {
+        if (!autoSegTargetDoc || !isDocumentOpen(autoSegDocumentId)) {
             setAutoSegHint('Tài liệu Photoshop ban đầu đã đóng. Hãy phân tích lại ảnh đang mở.', 'error');
             return;
         }
@@ -865,7 +919,7 @@ if (btnImportMasks) {
             }
 
             for (let index = 0; index < selected.length; index += 1) {
-                if (!Array.from(app.documents).some(doc => doc.id === autoSegDocumentId)) {
+                if (!isDocumentOpen(autoSegDocumentId)) {
                     throw new Error('Tài liệu ban đầu đã đóng; dừng nhập để không nhầm sang file khác.');
                 }
                 const item = selected[index];
@@ -902,8 +956,9 @@ if (btnImportMasks) {
 
             if (hideSourceAfterImport) {
                 // Hide exactly the layers that existed before the new layer package was imported.
-                for (const layer of autoSegOriginalLayers) {
-                    try { layer.visible = false; } catch (_) {}
+                const origLen = autoSegOriginalLayers ? autoSegOriginalLayers.length : 0;
+                for (let i = 0; i < origLen; i++) {
+                    try { autoSegOriginalLayers[i].visible = false; } catch (_) {}
                 }
             }
 
@@ -966,7 +1021,7 @@ btnProcess.addEventListener('click', async () => {
     const createdFiles = [];
 
     try {
-        originalTopLayers = Array.from(sourceDoc.layers);
+        originalTopLayers = getLayersList(sourceDoc);
         tempFolder = await fs.getTemporaryFolder();
         exportFile = await tempFolder.createFile('ai_layer_splitter_input.png', { overwrite: true });
 
