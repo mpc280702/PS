@@ -899,8 +899,9 @@ button:disabled {
   line-height: 1.35;
 }
 
-.auto-seg-selection { display: grid; grid-template-columns: 1.05fr .72fr .78fr; gap: 5px; }
-.auto-seg-selection button { min-width: 0; padding: 5px 3px; font-size: 9px; }
+.auto-seg-selection { display: flex; width: 100%; }
+.auto-seg-selection button { flex: 1 1 0; min-width: 0; padding: 5px 3px; font-size: 9px; margin-right: 4px; }
+.auto-seg-selection button:last-child { margin-right: 0; }
 .auto-mask-kind { display: inline-block; align-self: flex-start; margin-bottom: 2px; padding: 2px 5px; border-radius: 4px; color: #9fc3ff; background: rgba(67,136,255,.11); font-size: 8px; font-weight: 800; letter-spacing: .2px; }
 .auto-mask-kind.detail { color: #e9c68b; background: rgba(233,198,139,.10); }
 .auto-mask-card:not(.is-checked) { opacity: .78; }
