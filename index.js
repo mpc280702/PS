@@ -192,7 +192,32 @@ async function exportCompositeToPng(sourceDoc, exportFile) {
     }
 }
 
-async function importPngAsLayer(file, targetDoc, name, placement = null) {
+async function createLayerMaskFromTransparency(layer) {
+    if (!layer || !layer.id) {
+        throw new Error('Không xác định được layer để tạo Layer Mask.');
+    }
+
+    const { batchPlay } = require('photoshop').action;
+    await batchPlay([
+        {
+            _obj: 'select',
+            _target: [{ _ref: 'layer', _id: layer.id }],
+            makeVisible: false,
+            _options: { dialogOptions: 'dontDisplay' }
+        },
+        {
+            // Photoshop's native Layer > Layer Mask > From Transparency:
+            // converts the layer's current alpha/transparency into a user mask.
+            _obj: 'make',
+            new: { _class: 'channel' },
+            at: { _ref: 'channel', _enum: 'channel', _value: 'mask' },
+            using: { _enum: 'userMaskEnabled', _value: 'transparency' },
+            _options: { dialogOptions: 'dontDisplay' }
+        }
+    ], {});
+}
+
+async function importPngAsLayer(file, targetDoc, name, placement = null, createMaskFromTransparency = false) {
     let tempDoc = null;
     try {
         tempDoc = await app.open(file);
@@ -222,6 +247,10 @@ async function importPngAsLayer(file, targetDoc, name, placement = null) {
                 throw new Error('Không đọc được tọa độ layer sau khi nhập ảnh đã cắt.');
             }
             await importedLayer.translate(Number(placement.x) - left, Number(placement.y) - top);
+        }
+
+        if (createMaskFromTransparency) {
+            await createLayerMaskFromTransparency(importedLayer);
         }
 
         await tempDoc.closeWithoutSaving();
@@ -1026,6 +1055,7 @@ btnProcess.addEventListener('click', async () => {
     const model = $('selModel') ? $('selModel').value : 'isnet-general-use';
     const fillHoles = $('chkFillHoles') ? $('chkFillHoles').checked : true;
     const refineEdges = $('chkRefineEdges') ? $('chkRefineEdges').checked : true;
+    const createSubjectLayerMask = $('chkLayerMask') ? $('chkLayerMask').checked : true;
 
     if (!extractSubject && !inpaintBackground) {
         updateStatus('Chưa chọn tác vụ', 'Hãy bật ít nhất một tuỳ chọn xử lý.', 0, 'warning');
@@ -1099,7 +1129,7 @@ btnProcess.addEventListener('click', async () => {
             }
             if (extractSubject) {
                 const layerLabel = data.model === 'isnet-general-use' ? 'AI - Chủ thể siêu nét (IS-Net)' : `AI - Chủ thể (${data.model || 'Tách rời'})`;
-                await importPngAsLayer(resultFiles.foreground, sourceDoc, layerLabel);
+                await importPngAsLayer(resultFiles.foreground, sourceDoc, layerLabel, null, createSubjectLayerMask);
             }
             // Only hide originals after all requested result layers were imported successfully.
             if (inpaintBackground) {
