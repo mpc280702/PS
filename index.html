@@ -13,11 +13,10 @@
     <header class="header">
       <div class="brand-mark" aria-hidden="true">AI</div>
       <div class="heading-copy">
-        <div class="eyebrow">PHOTOSHOP WORKFLOW</div>
+        <div class="eyebrow">PHOTOSHOP WORKFLOW <span class="version-pill">v2.2</span></div>
         <h1>AI Layer Splitter</h1>
-        <p class="subtitle">Tách chủ thể, giữ layer gốc và xử lý nền ngay trên máy.</p>
+        <p class="subtitle">Tách chủ thể và tạo nền riêng bằng AI cục bộ.</p>
       </div>
-      <span class="version-pill">v2.2</span>
     </header>
 
     <aside id="previewNotice" class="preview-notice" hidden aria-live="polite">
@@ -33,6 +32,7 @@
       <span class="trust-chip">Layer gốc được giữ lại</span>
     </div>
 
+    <!-- 01. Chất lượng AI -->
     <section class="panel" aria-labelledby="modelHeading">
       <div class="section-heading">
         <span class="step-number">01</span>
@@ -49,6 +49,7 @@
       </select>
     </section>
 
+    <!-- 02. Tùy chọn xử lý tự động -->
     <section class="panel" aria-labelledby="tasksHeading">
       <div class="section-heading">
         <span class="step-number">02</span>
@@ -61,7 +62,6 @@
       <div class="option-list">
         <label class="option-row" for="chkPerson">
           <input type="checkbox" id="chkPerson" checked>
-          <span class="option-icon" aria-hidden="true">✂</span>
           <span class="option-copy">
             <strong>Tách chủ thể</strong>
             <small>Tạo layer người/vật thể với nền trong suốt.</small>
@@ -71,75 +71,40 @@
 
         <label class="option-row" for="chkFillHoles">
           <input type="checkbox" id="chkFillHoles">
-          <span class="option-icon" aria-hidden="true">◌</span>
           <span class="option-copy">
-            <strong>Lấp vùng rỗng nhỏ</strong>
-            <small>Có thể lấp cả khe hở nhỏ của chữ/họa tiết; chỉ bật khi thật sự cần.</small>
+            <strong>Lấp vùng rỗng nhỏ (Khuyên dùng)</strong>
+            <small>Tránh thủng màn hình laptop, phím hoặc vùng rỗng bên trong.</small>
           </span>
         </label>
 
         <label class="option-row" for="chkRefineEdges">
           <input type="checkbox" id="chkRefineEdges" checked>
-          <span class="option-icon" aria-hidden="true">✧</span>
           <span class="option-copy">
-            <strong>Làm mịn viền</strong>
-            <small>Giảm răng cưa và nhiễu nhỏ quanh mép ảnh.</small>
+            <strong>Làm mịn viền & Khử răng cưa</strong>
+            <small>Khử viền trắng lem, làm nét viền chữ & icon.</small>
           </span>
         </label>
 
         <label class="option-row" for="chkInpaint">
           <input type="checkbox" id="chkInpaint">
-          <span class="option-icon" aria-hidden="true">▧</span>
           <span class="option-copy">
             <strong>Tạo layer nền đã xóa chủ thể</strong>
-            <small>OpenCV Inpainting phù hợp nền đơn giản; nền phức tạp có thể còn dấu vết.</small>
+            <small>OpenCV Inpainting (phù hợp nền đơn giản).</small>
           </span>
           <span class="option-tag option-tag-muted">Tùy chọn</span>
         </label>
       </div>
     </section>
 
-    <section class="panel segmentation-panel" aria-labelledby="segHeading">
-      <div class="section-heading">
-        <span class="step-number">03</span>
-        <div>
-          <h2 id="segHeading">Tách từng vật thể chi tiết</h2>
-          <p>Bấm trực tiếp lên vật thể, chỉnh vùng chọn rồi thêm thành layer riêng.</p>
-        </div>
-      </div>
-      <div class="seg-body">
-        <button id="btnLoadSegImage" class="btn-secondary" type="button">Nạp ảnh từ Photoshop</button>
-        <p class="seg-instructions">Chấm <strong>+</strong> vào phần cần giữ. Chuyển sang <strong>−</strong> để chấm vào vùng dính nhầm và loại vùng đó khỏi vật thể. Có thể thêm nhiều điểm để tinh chỉnh viền.</p>
-        <label for="segPointMode" class="field-label seg-field-label">Chế độ điểm chọn</label>
-        <select id="segPointMode" class="model-select seg-select">
-          <option value="1" selected>+ Giữ phần này của vật thể</option>
-          <option value="0">− Loại trừ phần bị chọn nhầm</option>
-        </select>
-        <div id="segPreviewWrap" class="seg-preview-wrap" hidden>
-          <img id="segPreviewImage" alt="Ảnh hiện tại trong Photoshop; bấm lên một vật thể để chọn">
-          <canvas id="segOverlayCanvas" aria-hidden="true"></canvas>
-        </div>
-        <div class="seg-meta">
-          <span id="segPointCount">Chưa có điểm chọn</span>
-          <span id="segScore"></span>
-        </div>
-        <label for="segObjectName" class="field-label seg-field-label">Tên layer (có thể sửa)</label>
-        <input id="segObjectName" class="seg-name-input" type="text" maxlength="80" placeholder="Ví dụ: Chữ NHẬP DIỆN, hoa góc trái…">
-        <div class="seg-actions">
-          <button id="btnClearPoints" class="btn-secondary" type="button" disabled>Xóa điểm chọn</button>
-          <button id="btnAddObject" class="btn-primary" type="button" disabled>Thêm thành layer riêng</button>
-        </div>
-        <p id="segHint" class="seg-hint">Chế độ chi tiết dùng model SAM riêng. Nếu chưa cài model, hãy chạy file cai_dat_sam.bat một lần trên máy này.</p>
-      </div>
-    </section>
-
+    <!-- MAIN ACTION BUTTONS: Always prominent & right below options -->
     <div class="actions">
       <button id="btnProcess" class="btn-primary" type="button">
-        <span aria-hidden="true">✦</span> Tách layer ngay
+        ✦ TÁCH LAYER NGAY
       </button>
       <button id="btnCheck" class="btn-secondary" type="button">Kiểm tra AI Server</button>
     </div>
 
+    <!-- STATUS CARD -->
     <section class="status-card" aria-labelledby="statusText" aria-live="polite">
       <div class="status-topline">
         <span id="statusDot" class="status-dot" aria-hidden="true"></span>
@@ -150,6 +115,55 @@
         <div id="progressBar" class="progress-fill"></div>
       </div>
       <p id="detailText" class="detail-text">Mở tài liệu trong Photoshop, chọn tác vụ và bắt đầu. Ảnh gốc không bị xóa.</p>
+    </section>
+
+    <!-- 03. Tùy chọn nâng cao: Tách từng vật thể chi tiết (SAM AI) -->
+    <section class="panel segmentation-panel" aria-labelledby="segHeading">
+      <div class="section-heading">
+        <span class="step-number">03</span>
+        <div>
+          <h2 id="segHeading">Tách từng vật thể chi tiết (SAM)</h2>
+          <p>Chấm điểm lên vật thể để tách lẻ từng chi tiết riêng biệt.</p>
+        </div>
+      </div>
+      <div class="seg-body">
+        <button id="btnLoadSegImage" class="btn-secondary btn-sam-load" type="button">
+          📷 Nạp ảnh từ Photoshop
+        </button>
+
+        <div id="segPreviewWrap" class="seg-preview-wrap" hidden>
+          <div class="seg-instructions">Chấm <strong>+</strong> vào vật thể để giữ. Chọn <strong>−</strong> để chấm vào vùng dính nhầm và loại bỏ.</div>
+          
+          <div class="seg-canvas-box">
+            <img id="segPreviewImage" alt="Ảnh từ Photoshop">
+            <canvas id="segOverlayCanvas" aria-hidden="true"></canvas>
+          </div>
+
+          <div class="seg-toolbar-row">
+            <label for="segPointMode" class="field-label-inline">Chế độ:</label>
+            <select id="segPointMode" class="model-select-inline">
+              <option value="1" selected>+ Giữ vật thể</option>
+              <option value="0">− Loại trừ vùng lem</option>
+            </select>
+          </div>
+
+          <div class="seg-meta">
+            <span id="segPointCount">Chưa có điểm chọn</span>
+            <span id="segScore"></span>
+          </div>
+
+          <div class="seg-input-row">
+            <input id="segObjectName" class="seg-name-input" type="text" maxlength="80" placeholder="Tên layer (VD: Bông hoa, chiếc xe...)">
+          </div>
+
+          <div class="seg-actions">
+            <button id="btnClearPoints" class="btn-secondary" type="button" disabled>Xóa điểm</button>
+            <button id="btnAddObject" class="btn-primary" type="button" disabled>➕ Thêm vào PS</button>
+          </div>
+        </div>
+
+        <p id="segHint" class="seg-hint">Bấm "Nạp ảnh từ Photoshop" để bắt đầu. Nếu chưa cài SAM, hãy chạy file cai_dat_sam.bat.</p>
+      </div>
     </section>
 
     <footer class="footer">
